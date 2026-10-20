@@ -1,0 +1,21 @@
+{
+  "name": "Kairos",
+  "short_name": "Kairos",
+  "description": "Ta journée, tes mots de passe et tes codes 2FA, chiffrés sur ton appareil.",
+  "lang": "fr",
+  "start_url": "./#/today",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0D1120",
+  "theme_color": "#151A31",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Codes 2FA", "url": "./#/otp" },
+    { "name": "Coffre", "url": "./#/vault" },
+    { "name": "Tâches", "url": "./#/tasks" }
+  ]
+}
