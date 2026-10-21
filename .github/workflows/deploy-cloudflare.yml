@@ -1,12 +1,12 @@
 name: Déployer sur Cloudflare
 
+# Déploiement manuel de secours (onglet Actions > Run workflow).
+# La voie recommandée est le build Git intégré de Cloudflare (voir README).
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: cloudflare-deploy
@@ -41,20 +41,5 @@ jobs:
             echo "CLOUDFLARE_ACCOUNT_ID=$ID" >> "$GITHUB_ENV"
           fi
 
-      - name: Créer ou retrouver la base D1
-        run: node scripts/ensure-d1.mjs
-
-      - name: Appliquer le schéma de la base
-        run: npx wrangler d1 migrations apply kairos-db --remote
-
-      - name: Déployer le Worker et l'application
+      - name: Déployer (la base D1 est créée automatiquement si besoin)
         run: npx wrangler deploy
-
-      - name: Enregistrer l'ID de la base dans le dépôt
-        run: |
-          if ! git diff --quiet wrangler.jsonc; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -am "chore: ID de la base D1 [skip ci]"
-            git push
-          fi

@@ -25,32 +25,30 @@ Déployé sur Cloudflare, Kairos peut synchroniser ton coffre entre tous tes app
 **Activer** : Réglages → Synchronisation → Activer, puis choisis un identifiant de coffre.
 **Nouvel appareil** : sur l’écran d’accueil, « J’ai déjà un coffre en ligne », puis identifiant + mot de passe maître.
 
-### Déploiement automatique
+### Déployer sur Cloudflare (recommandé)
 
-Chaque push sur `main` lance `.github/workflows/deploy-cloudflare.yml`, qui :
-1. crée la base D1 `kairos-db` si elle n’existe pas encore ;
-2. applique le schéma (`migrations/`) ;
-3. déploie le Worker `kairos` (application + API) avec `wrangler deploy`.
+1. Tableau de bord Cloudflare → **Workers & Pages** → **Create** → onglet **Workers** → **Import a repository**.
+   ⚠️ Choisis bien **Workers**, pas Pages : Pages n’exécuterait pas l’API de synchronisation.
+2. Sélectionne le dépôt `kairos`.
+3. Nom du projet : **`kairos`** (il doit correspondre au `name` de `wrangler.jsonc`).
+4. Laisse la commande de build vide et la commande de déploiement sur `npx wrangler deploy`. Clique **Deploy**.
 
-Secrets GitHub nécessaires (Settings → Secrets and variables → Actions) :
-- `CLOUDFLARE_API_TOKEN` : token avec les permissions **Workers Scripts : Edit**, **D1 : Edit** et **Account Settings : Read** ;
-- `CLOUDFLARE_ACCOUNT_ID` (facultatif) : utile si le token a accès à plusieurs comptes.
+Au premier déploiement, Wrangler crée automatiquement la base D1 `kairos-db` et la relie au Worker ; le Worker crée ses tables au premier appel. Ensuite, chaque push sur `main` redéploie tout seul.
+
+Une action GitHub manuelle (`.github/workflows/deploy-cloudflare.yml`, secret `CLOUDFLARE_API_TOKEN`) existe aussi en solution de secours.
 
 ### Déploiement manuel
 
 ```bash
 npm install
 npx wrangler login
-npx wrangler d1 create kairos-db          # puis copie l’ID dans wrangler.jsonc
-npx wrangler d1 migrations apply kairos-db --remote
-npx wrangler deploy
+npx wrangler deploy                        # crée la base D1 si besoin
 ```
 
 ### Développement local
 
 ```bash
 npm install
-npx wrangler d1 migrations apply kairos-db --local
 npx wrangler dev                           # http://localhost:8787 avec une base D1 locale
 ```
 
