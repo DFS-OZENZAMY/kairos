@@ -13,11 +13,52 @@ Ta journée de A à Z, tes mots de passe et tes codes 2FA, dans une seule app. T
 - **Focus** : minuteur Pomodoro avec statistiques sur 7 jours et notifications.
 - **Recherche globale** : `Ctrl + K` pour trouver un site, un code, une tâche ou une note et copier en un geste.
 
+## Synchronisation entre appareils (Cloudflare)
+
+Déployé sur Cloudflare, Kairos peut synchroniser ton coffre entre tous tes appareils grâce à une base **Cloudflare D1**, **chiffrée de bout en bout** :
+
+- Le coffre est chiffré dans ton navigateur avant l’envoi. Le serveur ne stocke que du texte chiffré.
+- Le serveur ne connaît jamais ton mot de passe maître ni ta clé de chiffrement. Il reçoit un jeton d’accès dérivé séparément (PBKDF2), dont il ne garde que l’empreinte SHA-256.
+- Si tu modifies sur deux appareils en même temps, les changements sont fusionnés élément par élément (la version la plus récente gagne, les suppressions sont respectées).
+- Limitation des tentatives : 10 essais ratés bloquent l’accès 15 minutes.
+
+**Activer** : Réglages → Synchronisation → Activer, puis choisis un identifiant de coffre.
+**Nouvel appareil** : sur l’écran d’accueil, « J’ai déjà un coffre en ligne », puis identifiant + mot de passe maître.
+
+### Déploiement automatique
+
+Chaque push sur `main` lance `.github/workflows/deploy-cloudflare.yml`, qui :
+1. crée la base D1 `kairos-db` si elle n’existe pas encore ;
+2. applique le schéma (`migrations/`) ;
+3. déploie le Worker `kairos` (application + API) avec `wrangler deploy`.
+
+Secrets GitHub nécessaires (Settings → Secrets and variables → Actions) :
+- `CLOUDFLARE_API_TOKEN` : token avec les permissions **Workers Scripts : Edit**, **D1 : Edit** et **Account Settings : Read** ;
+- `CLOUDFLARE_ACCOUNT_ID` (facultatif) : utile si le token a accès à plusieurs comptes.
+
+### Déploiement manuel
+
+```bash
+npm install
+npx wrangler login
+npx wrangler d1 create kairos-db          # puis copie l’ID dans wrangler.jsonc
+npx wrangler d1 migrations apply kairos-db --remote
+npx wrangler deploy
+```
+
+### Développement local
+
+```bash
+npm install
+npx wrangler d1 migrations apply kairos-db --local
+npx wrangler dev                           # http://localhost:8787 avec une base D1 locale
+```
+
 ## Sécurité
 
 - Un seul **mot de passe maître**, jamais stocké. La clé de chiffrement en est dérivée avec PBKDF2-SHA256 (310 000 itérations, sel aléatoire).
 - Toutes les données sont chiffrées avec **AES-256-GCM** (Web Crypto API du navigateur) avant d’être enregistrées dans le stockage local.
-- **Aucun serveur, aucun compte, aucune télémétrie.** Rien ne quitte ton appareil. Les seules ressources externes sont les polices Google Fonts et la bibliothèque de lecture QR `jsQR` (jsDelivr, version figée).
+- **Aucun compte, aucune télémétrie.** Sans synchronisation, rien ne quitte ton appareil. Avec, seul le coffre chiffré est envoyé à ta propre base Cloudflare. Les seules ressources externes sont les polices Google Fonts et la bibliothèque de lecture QR `jsQR` (jsDelivr, version figée).
 - Verrouillage automatique après inactivité (réglable), et `Ctrl + Maj + L` pour verrouiller tout de suite.
 - **Si tu oublies ton mot de passe maître, personne ne peut récupérer les données.** Télécharge régulièrement une sauvegarde chiffrée (Réglages → Sauvegarde).
 
@@ -25,12 +66,12 @@ Ta journée de A à Z, tes mots de passe et tes codes 2FA, dans une seule app. T
 
 ## Utilisation
 
-### En ligne (GitHub Pages)
-Ouvre l’adresse GitHub Pages du dépôt dans Chrome ou Edge, puis installe-la : icône d’installation dans la barre d’adresse (ou menu ⋮ → Installer Kairos). Elle apparaît alors dans le menu Démarrer de Windows comme une vraie application et fonctionne hors ligne.
+### En ligne
+Sur Cloudflare (avec synchronisation) ou sur GitHub Pages (version locale uniquement), ouvre l’adresse dans Chrome ou Edge, puis installe-la : icône d’installation dans la barre d’adresse (ou menu ⋮ → Installer Kairos). Elle apparaît alors dans le menu Démarrer de Windows comme une vraie application et fonctionne hors ligne.
 
-### En local
+### En local, sans synchronisation
 ```bash
-python -m http.server 8080
+cd public && python -m http.server 8080
 # puis ouvre http://localhost:8080
 ```
 
@@ -51,11 +92,12 @@ python -m http.server 8080
 ## Structure
 
 ```
-index.html            Coquille de l’app
-styles.css            Interface (thèmes clair et sombre)
-app.js                Logique : chiffrement, TOTP, vues
-sw.js                 Fonctionnement hors ligne
-manifest.webmanifest  Installation comme application
+public/               Application (HTML, CSS, JS natifs, sans build)
+  app.js              Chiffrement, TOTP, synchronisation, vues
+  sw.js               Fonctionnement hors ligne
+worker/index.js       API Cloudflare (synchronisation chiffrée)
+migrations/           Schéma de la base D1
+wrangler.jsonc        Configuration Cloudflare
+scripts/ensure-d1.mjs Création automatique de la base
+.github/workflows/    Déploiements Cloudflare et GitHub Pages
 ```
-
-Aucune étape de build : HTML, CSS et JavaScript natifs.

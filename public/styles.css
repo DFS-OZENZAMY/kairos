@@ -249,6 +249,17 @@ kbd {
 .nav .badge.live { background: var(--accent); color: var(--accent-ink); }
 .rail-foot { margin-top: auto; display: grid; gap: 6px; }
 .rail-foot .btn { justify-content: flex-start; }
+.sync-status {
+  display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 12px; border: 0; border-radius: 10px;
+  background: transparent; color: var(--muted); font-size: 13px; text-align: left;
+}
+.sync-status:hover { background: var(--surface-2); color: var(--ink); }
+.sync-status i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+.sync-status[data-s="busy"] i { background: var(--accent); animation: pulse 1s infinite alternate; }
+.sync-status[data-s="offline"] i { background: var(--amber); }
+.sync-status[data-s="error"] i { background: var(--danger); }
+.sync-status[data-s="error"] { color: var(--danger); }
+@keyframes pulse { to { opacity: .3; } }
 .topbar { display: none; }
 
 main { padding: 36px clamp(18px, 4vw, 52px) 110px; outline: none; }

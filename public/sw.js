@@ -1,5 +1,5 @@
 /* Kairos — service worker : fonctionne hors ligne */
-const CACHE = 'kairos-v1.0.0';
+const CACHE = 'kairos-v1.1.0';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -12,6 +12,7 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  if (url.origin === location.origin && url.pathname.startsWith('/api/')) return; // jamais de cache pour l'API
   if (url.origin === location.origin) {
     // Réseau d'abord pour recevoir les mises à jour, cache si hors ligne
     e.respondWith(fetch(req).then((res) => {

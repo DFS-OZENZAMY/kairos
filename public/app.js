@@ -1,7 +1,7 @@
 /* Kairos — application locale chiffrée (tâches, habitudes, notes, coffre, 2FA, focus) */
 'use strict';
 (() => {
-  const VERSION = '1.0.0';
+  const VERSION = '1.1.0';
   const ITER = 310000;
   const STORE_KEY = 'kairos.vault.v1';
   const PREFS_KEY = 'kairos.prefs';
@@ -79,6 +79,7 @@
     warn: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.01"/>',
     back: '<path d="M15 5l-7 7 7 7"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>',
+    cloud: '<path d="M7 18h10.5a4.5 4.5 0 0 0 .6-8.96A6 6 0 0 0 6.3 10.1 4 4 0 0 0 7 18z"/>',
     dice: '<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1"/><circle cx="15.5" cy="15.5" r="1"/><circle cx="15.5" cy="8.5" r="1"/><circle cx="8.5" cy="15.5" r="1"/>',
   };
   const ic = (n, cls = '') => `<svg class="ic ${n === 'play' || n === 'pause' ? 'fill' : ''} ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
@@ -267,7 +268,7 @@
   /* =========================================================
      Session et données
      ========================================================= */
-  let session = { key: null, salt: null, data: null };
+  let session = { key: null, salt: null, data: null, iter: ITER, auth: null };
   const state = { view: 'today', taskFilter: 'today', vaultFilter: 'all', vaultQuery: '', otpQuery: '', noteId: null, noteQuery: '', habitColor: '#2F45D8' };
   const D = () => session.data;
 
@@ -289,12 +290,14 @@
 
   let saveTimer = null, savePending = false;
   function save() { savePending = true; clearTimeout(saveTimer); saveTimer = setTimeout(persist, 350); }
-  async function persist() {
+  async function persist(push = true) {
     clearTimeout(saveTimer);
     if (!session.key || !session.data) return;
     savePending = false;
+    stamp();
     const { iv, ct } = await encryptJSON(session.key, session.data);
-    Store.write({ v: 1, app: 'kairos', kdf: 'PBKDF2-SHA256', iter: ITER, salt: b64(session.salt), iv, ct });
+    Store.write({ v: 1, app: 'kairos', kdf: 'PBKDF2-SHA256', iter: session.iter || ITER, salt: b64(session.salt), iv, ct });
+    if (push && prefs.syncId) { sync.rev++; if (!prefs.syncDirty) { prefs.syncDirty = true; savePrefs(); } schedulePush(); }
   }
   addEventListener('beforeunload', () => { if (savePending) persist(); });
   addEventListener('pagehide', () => { if (savePending) persist(); });
@@ -383,6 +386,7 @@
       </form>
       <div class="lock-foot"><span>Chiffré sur cet appareil, AES-256</span>
         ${exists ? '<button class="link-btn" type="button" data-act="forgot">Mot de passe oublié ?</button>' : '<button class="link-btn" type="button" data-act="importFromLock">Restaurer une sauvegarde</button>'}</div>
+      ${exists ? '' : `<div id="lockSync" ${sync.available ? '' : 'hidden'}><button class="btn block" type="button" data-act="syncConnect">${ic('cloud')}J’ai déjà un coffre en ligne</button></div>`}
     </div>`;
     const mp = $('#mp');
     setTimeout(() => mp.focus(), 50);
@@ -416,21 +420,31 @@
     const salt = unb64(s.salt);
     const key = await deriveKey(pw, salt, s.iter || ITER);
     const data = await decryptJSON(key, s.iv, s.ct);
-    session = { key, salt, data: migrate(data) };
+    session = { key, salt, data: migrate(data), iter: s.iter || ITER, auth: null };
+    takeSnap();
     enterApp();
+    if (prefs.syncId) {
+      await syncReady;
+      if (!sync.available) { setSync(); return; }
+      const k = session.key;
+      deriveAuth(pw, salt, session.iter).then((a) => { if (session.key !== k) return; session.auth = a; pullNow(); });
+    }
   }
   async function createVault(pw) {
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const key = await deriveKey(pw, salt);
-    session = { key, salt, data: seed() };
-    await persist();
+    session = { key, salt, data: seed(), iter: ITER, auth: null };
+    takeSnap();
+    await persist(false);
     enterApp();
     toast('Coffre créé. Tout est chiffré sur cet appareil.', 'ok');
   }
   async function lock() {
     if (!session.key) return;
     await persist();
-    session = { key: null, salt: null, data: null };
+    if (syncOn() && prefs.syncDirty) await Promise.race([pushNow(), new Promise((r) => setTimeout(r, 4000))]);
+    session = { key: null, salt: null, data: null, iter: ITER, auth: null };
+    sync.needsReconnect = false; setSync();
     hmacKeys.clear(); codeCache.clear();
     closeModal(); if ($('#palette').open) $('#palette').close();
     showLock();
@@ -447,6 +461,7 @@
     $('#lock').hidden = true; $('#lock').innerHTML = '';
     $('#app').hidden = false;
     lastActivity = Date.now();
+    setSync();
     if (pendingFocus) { D().focus[pendingFocus.day] = (D().focus[pendingFocus.day] || 0) + pendingFocus.min; pendingFocus = null; save(); }
     route();
   }
@@ -1077,7 +1092,7 @@
   let installEvt = null;
   addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; if (state.view === 'settings' && session.key) render(); });
   VIEWS.settings = () => `
-    <header class="page-head"><div><h1>Réglages</h1><p class="sub">Version ${VERSION}. Tes données ne quittent jamais cet appareil.</p></div></header>
+    <header class="page-head"><div><h1>Réglages</h1><p class="sub">Version ${VERSION}. ${prefs.syncId ? 'Synchronisé, chiffré de bout en bout : le serveur ne voit jamais tes données.' : 'Tes données ne quittent jamais cet appareil.'}</p></div></header>
     <div class="settings">
       <section class="panel"><h2 style="margin-bottom:14px">Apparence</h2>
         <div class="set-row"><div><strong>Thème</strong><p>Suit Windows par défaut.</p></div>
@@ -1091,6 +1106,7 @@
         <div class="set-row"><div><strong>Mot de passe maître</strong><p>Rechiffre tout le coffre avec un nouveau mot de passe.</p></div>
           <button class="btn" data-act="changeMaster">Changer</button></div>
       </section>
+      ${syncSettingsHtml()}
       <section class="panel"><h2 style="margin-bottom:14px">Sauvegarde</h2>
         <div class="set-row"><div><strong>Télécharger une sauvegarde</strong><p>Fichier chiffré, lisible uniquement avec ton mot de passe maître actuel.</p></div>
           <button class="btn" data-act="exportBackup">${ic('download')}Télécharger</button></div>
@@ -1154,7 +1170,7 @@
           try {
             const salt = unb64(blob.salt); const key = await deriveKey(e.target.pw.value, salt, blob.iter || ITER);
             const data = migrate(await decryptJSON(key, blob.iv, blob.ct));
-            if (fromLock || !session.key) { Store.write(blob); session = { key, salt, data }; closeModal(); enterApp(); }
+            if (fromLock || !session.key) { Store.write(blob); clearSyncPrefs(); session = { key, salt, data, iter: blob.iter || ITER, auth: null }; takeSnap(); closeModal(); enterApp(); }
             else { session.data = data; await persist(); closeModal(); render(); }
             toast('Sauvegarde restaurée', 'ok');
           } catch { btn.disabled = false; btn.textContent = 'Restaurer'; $('#rsErr').textContent = 'Mot de passe incorrect pour cette sauvegarde.'; }
@@ -1162,6 +1178,211 @@
       });
     };
     inp.click();
+  }
+
+
+  /* =========================================================
+     Synchronisation chiffrée (Cloudflare Worker + D1)
+     Le serveur ne reçoit que le coffre chiffré et un jeton dérivé
+     du mot de passe maître (dérivation séparée de la clé AES).
+     ========================================================= */
+  const COLS = ['vault', 'otp', 'tasks', 'habits', 'notes'];
+  const sync = { available: false, busy: false, again: false, status: 'off', message: '', last: 0, timer: null, rev: 0, needsReconnect: false };
+  const syncOn = () => !!(sync.available && prefs.syncId && session.key && session.auth && !sync.needsReconnect);
+  function clearSyncPrefs() { delete prefs.syncId; delete prefs.syncVersion; delete prefs.syncDirty; delete prefs.syncLast; savePrefs(); sync.needsReconnect = false; }
+
+  async function deriveAuth(password, salt, iter = ITER) {
+    const base = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
+    const s = new Uint8Array([...salt, ...enc.encode('|kairos-sync-auth')]);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: s, iterations: iter, hash: 'SHA-256' }, base, 256);
+    return [...new Uint8Array(bits)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  async function apiCall(method, path, body, cred) {
+    const headers = { 'content-type': 'application/json' };
+    const id = cred?.id ?? prefs.syncId, auth = cred?.auth ?? session.auth;
+    if (id && auth) { headers['x-vault-id'] = id; headers.authorization = `Bearer ${auth}`; }
+    const r = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
+    let data = null; try { data = await r.json(); } catch { /* rien */ }
+    return { status: r.status, ok: r.ok, data };
+  }
+  async function detectSync() {
+    try {
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
+      const r = await fetch('/api/health', { cache: 'no-store', signal: ctl.signal }); clearTimeout(t);
+      const d = await r.json(); sync.available = !!(d && d.app === 'kairos' && d.sync);
+    } catch { sync.available = false; }
+    const ls = $('#lockSync'); if (ls) ls.hidden = !sync.available;
+    if (session.key && state.view === 'settings') render();
+  }
+  const syncReady = detectSync();
+
+  // Horodatage automatique des éléments modifiés + pierres tombales des suppressions
+  let snap = new Map();
+  const itemJson = (it) => { const { _u, ...rest } = it; return JSON.stringify(rest); };
+  function takeSnap() {
+    snap = new Map(); const d = D(); if (!d) return;
+    for (const c of COLS) for (const it of d[c]) snap.set(`${c}:${it.id}`, itemJson(it));
+    for (const k of Object.keys(d.journal || {})) snap.set(`journal:${k}`, d.journal[k]);
+  }
+  function stamp() {
+    const d = D(); if (!d) return;
+    const now = Date.now(); const seen = new Set();
+    d.deleted ||= {}; d.mapU ||= {};
+    for (const c of COLS) for (const it of d[c]) {
+      const k = `${c}:${it.id}`; seen.add(k);
+      const j = itemJson(it);
+      if (snap.get(k) !== j) { it._u = now; snap.set(k, j); }
+    }
+    for (const k of Object.keys(d.journal)) {
+      const sk = `journal:${k}`; seen.add(sk);
+      if (snap.get(sk) !== d.journal[k]) { d.mapU[k] = now; snap.set(sk, d.journal[k]); }
+    }
+    for (const k of [...snap.keys()]) if (!seen.has(k)) {
+      const i = k.indexOf(':'); const c = k.slice(0, i), id = k.slice(i + 1);
+      if (c === 'journal') d.mapU[id] = now; else d.deleted[id] = now;
+      snap.delete(k);
+    }
+    const lim = now - 120 * 864e5;
+    for (const [id, t] of Object.entries(d.deleted)) if (t < lim) delete d.deleted[id];
+  }
+  // Fusion : pour chaque élément, la version la plus récente gagne ; les suppressions sont respectées
+  function mergeData(a, b) {
+    const out = { ...b, ...a };
+    const del = { ...(b.deleted || {}) };
+    for (const [id, t] of Object.entries(a.deleted || {})) del[id] = Math.max(del[id] || 0, t);
+    for (const c of COLS) {
+      const m = new Map();
+      for (const it of [...(b[c] || []), ...(a[c] || [])]) { const cur = m.get(it.id); if (!cur || (it._u || 0) >= (cur._u || 0)) m.set(it.id, it); }
+      out[c] = [...m.values()].filter((it) => !(del[it.id] && del[it.id] >= (it._u || 0)));
+    }
+    const au = a.mapU || {}, bu = b.mapU || {}, mu = { ...bu };
+    for (const [k, t] of Object.entries(au)) mu[k] = Math.max(mu[k] || 0, t);
+    const j = {}, aj = a.journal || {}, bj = b.journal || {};
+    for (const k of new Set([...Object.keys(aj), ...Object.keys(bj), ...Object.keys(mu)])) {
+      const ta = au[k] || 0, tb = bu[k] || 0;
+      const v = ta > tb ? aj[k] : tb > ta ? bj[k] : (aj[k] ?? bj[k]);
+      if (v) j[k] = v;
+    }
+    out.journal = j; out.mapU = mu;
+    for (const m of ['focus', 'focusSessions']) { const o = { ...(b[m] || {}) }; for (const [k, v] of Object.entries(a[m] || {})) o[k] = Math.max(o[k] || 0, v); out[m] = o; }
+    out.deleted = del;
+    return out;
+  }
+
+  function setSync(status, message = '') {
+    if (status) { sync.status = status; sync.message = message; if (status === 'ok') { sync.last = Date.now(); prefs.syncLast = sync.last; savePrefs(); } }
+    const el = $('#syncStatus'); if (!el) return;
+    const on = !!(prefs.syncId && session.key && sync.available);
+    el.hidden = !on; if (!on) return;
+    const st = sync.needsReconnect ? 'error' : sync.status;
+    const label = st === 'busy' ? 'Synchronisation…' : st === 'offline' ? 'Hors ligne, en attente' : st === 'error' ? 'Synchro à vérifier' : sync.last ? `Synchronisé ${timeAgo(sync.last)}` : 'Synchronisé';
+    el.dataset.s = st; el.querySelector('span').textContent = label;
+    el.title = sync.message || 'Synchroniser maintenant';
+  }
+  function handleSyncError(r) {
+    if (r.status === 401) { sync.needsReconnect = true; setSync('error', 'Accès refusé : le mot de passe maître a peut-être changé sur un autre appareil. Reconnecte cet appareil dans Réglages.'); }
+    else if (r.status === 404) { sync.needsReconnect = true; setSync('error', 'Le coffre en ligne n’existe plus. Réactive la synchronisation dans Réglages.'); }
+    else if (r.status === 413) setSync('error', 'Coffre trop volumineux pour la synchronisation (2 Mo maximum).');
+    else if (r.status === 429) setSync('error', 'Trop d’essais, réessaie dans quelques minutes.');
+    else setSync('offline', r.data?.error || 'Serveur injoignable');
+    if (state.view === 'settings' && session.key) softRender();
+  }
+  function softRender() {
+    if (!session.key) return;
+    const a = document.activeElement;
+    if (a && $('#view').contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) { renderNav(); return; }
+    render();
+  }
+  async function applyRemote(rem) {
+    if (rem.salt !== b64(session.salt)) {
+      sync.needsReconnect = true;
+      setSync('error', 'Le mot de passe maître a été changé sur un autre appareil. Reconnecte cet appareil dans Réglages.');
+      return false;
+    }
+    const remote = migrate(await decryptJSON(session.key, rem.iv, rem.ct));
+    if (savePending) await persist(false);
+    session.data = mergeData(session.data, remote);
+    takeSnap();
+    prefs.syncVersion = rem.version; savePrefs();
+    await persist(false);
+    softRender();
+    return true;
+  }
+  function schedulePush(delay = 1500) { clearTimeout(sync.timer); sync.timer = setTimeout(pushNow, delay); }
+  async function pushNow() {
+    if (!syncOn()) return;
+    if (sync.busy) { sync.again = true; return; }
+    sync.busy = true; setSync('busy');
+    try {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        if (savePending) await persist(false);
+        const rev = sync.rev; const s = Store.read();
+        const r = await apiCall('PUT', '/api/vault', { iv: s.iv, ct: s.ct, baseVersion: prefs.syncVersion || 0 });
+        if (r.ok) {
+          prefs.syncVersion = r.data.version;
+          if (rev === sync.rev) prefs.syncDirty = false; else sync.again = true;
+          savePrefs(); setSync('ok'); break;
+        }
+        if (r.status === 409 && r.data?.current) { if (!(await applyRemote(r.data.current))) break; continue; }
+        handleSyncError(r); break;
+      }
+    } catch { setSync('offline', 'Serveur injoignable'); }
+    finally { sync.busy = false; if (sync.again) { sync.again = false; schedulePush(); } }
+  }
+  async function pullNow() {
+    if (!syncOn() || sync.busy) return;
+    sync.busy = true; setSync('busy');
+    let ok = false;
+    try {
+      const r = await apiCall('GET', '/api/vault');
+      if (!r.ok) { handleSyncError(r); return; }
+      if (r.data.version !== prefs.syncVersion && !(await applyRemote(r.data))) return;
+      ok = true; setSync('ok');
+    } catch { setSync('offline', 'Serveur injoignable'); }
+    finally { sync.busy = false; if (ok && prefs.syncDirty) schedulePush(0); }
+  }
+  setInterval(() => { if (syncOn() && !document.hidden && !savePending) pullNow(); }, 60000);
+  setInterval(() => setSync(), 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && syncOn()) pullNow(); });
+  addEventListener('online', () => { if (syncOn()) { if (prefs.syncDirty) pushNow(); else pullNow(); } });
+
+  function syncSettingsHtml() {
+    if (!sync.available) return `<section class="panel"><h2 style="margin-bottom:14px">Synchronisation</h2>
+      <div class="set-row"><div><strong>Indisponible sur cet hébergement</strong><p>Ouvre Kairos depuis ton déploiement Cloudflare pour retrouver tes données sur tous tes appareils.</p></div></div></section>`;
+    if (!prefs.syncId) return `<section class="panel"><h2 style="margin-bottom:14px">Synchronisation</h2>
+      <div class="set-row"><div><strong>Synchroniser mes appareils</strong><p>Ton coffre est envoyé chiffré sur ta base Cloudflare. Le serveur ne peut ni le lire ni connaître ton mot de passe.</p></div>
+        <button class="btn primary" data-act="syncEnable">${ic('cloud')}Activer</button></div>
+      <div class="set-row"><div><strong>J’ai déjà un coffre en ligne</strong><p>Rejoins-le depuis cet appareil. Les données d’ici sont fusionnées avec les siennes.</p></div>
+        <button class="btn" data-act="syncReconnect">Rejoindre</button></div></section>`;
+    const st = sync.needsReconnect ? 'Action requise' : sync.status === 'offline' ? 'Hors ligne' : sync.status === 'busy' ? 'En cours' : 'Active';
+    return `<section class="panel"><h2 style="margin-bottom:14px">Synchronisation</h2>
+      <div class="set-row"><div><strong>Identifiant du coffre : ${esc(prefs.syncId)}</strong>
+        <p>${esc(st)}${sync.last || prefs.syncLast ? `, dernière synchro ${esc(timeAgo(sync.last || prefs.syncLast))}` : ''}. ${sync.message ? esc(sync.message) : 'Chiffré de bout en bout.'}</p></div>
+        ${sync.needsReconnect ? `<button class="btn primary" data-act="syncReconnect">Reconnecter</button>` : `<button class="btn" data-act="syncNow">${ic('refresh')}Synchroniser</button>`}</div>
+      <div class="set-row"><div><strong>Déconnecter cet appareil</strong><p>Les données restent ici et en ligne, la synchronisation s’arrête sur cet appareil.</p></div>
+        <button class="btn" data-act="syncDisconnect">Déconnecter</button></div>
+      <div class="set-row"><div><strong>Supprimer le coffre en ligne</strong><p>Efface la copie chiffrée du serveur. Les données de cet appareil sont conservées.</p></div>
+        <button class="btn danger" data-act="syncDelete">${ic('trash')}Supprimer</button></div></section>`;
+  }
+  function syncEnableDialog() {
+    openModal(`<form class="dlg" data-form="syncEnable" autocomplete="off">
+      <div class="dlg-head"><h2>Activer la synchronisation</h2><button class="icon-btn" type="button" data-act="close" aria-label="Fermer">${ic('x')}</button></div>
+      <p class="hint" style="font-size:15px">Choisis un identifiant de coffre. Tu en auras besoin, avec ton mot de passe maître, pour te connecter depuis un autre appareil.</p>
+      <label class="field"><span>Identifiant du coffre</span><input name="id" placeholder="par ex. ozenzamy" autocapitalize="none" spellcheck="false" pattern="[a-z0-9][a-z0-9._\\-]{2,63}" required autofocus></label>
+      <p class="hint">Lettres minuscules, chiffres, point, tiret. 3 caractères minimum.</p>
+      <label class="field"><span>Mot de passe maître</span><input type="password" name="pw" autocomplete="current-password" required></label>
+      <p class="form-error" id="seErr" role="alert"></p>
+      <div class="dlg-foot"><button class="btn ghost" type="button" data-act="syncReconnect">J’ai déjà un coffre en ligne</button><span class="spacer"></span>
+        <button class="btn" type="button" data-act="close">Annuler</button><button class="btn primary">Activer</button></div></form>`);
+  }
+  function syncConnectDialog(merge) {
+    openModal(`<form class="dlg" data-form="syncConnect" data-merge="${merge ? 1 : ''}" autocomplete="off">
+      <div class="dlg-head"><h2>${merge ? 'Rejoindre mon coffre en ligne' : 'Se connecter à mon coffre en ligne'}</h2><button class="icon-btn" type="button" data-act="close" aria-label="Fermer">${ic('x')}</button></div>
+      <p class="hint" style="font-size:15px">${merge ? 'Entre l’identifiant du coffre et son mot de passe maître. Les données de cet appareil seront fusionnées avec celles du coffre en ligne, qui devient ton coffre ici aussi.' : 'Retrouve tes données sur cet appareil : entre l’identifiant choisi lors de l’activation et ton mot de passe maître.'}</p>
+      <label class="field"><span>Identifiant du coffre</span><input name="id" value="${esc(prefs.syncId || '')}" autocapitalize="none" spellcheck="false" required ${prefs.syncId ? '' : 'autofocus'}></label>
+      <label class="field"><span>Mot de passe maître</span><input type="password" name="pw" autocomplete="current-password" required ${prefs.syncId ? 'autofocus' : ''}></label>
+      <p class="form-error" id="scErr" role="alert"></p>
+      <div class="dlg-foot"><button class="btn" type="button" data-act="close">Annuler</button><button class="btn primary">Se connecter</button></div></form>`);
   }
 
   /* =========================================================
@@ -1351,6 +1572,24 @@
     focusToggle: () => toggleTimer(),
     focusReset: () => { setMode(timer.mode); rerender(); },
     focusSkip: () => { timer.running = false; if (timer.mode === 'focus') setMode('short'); else setMode('focus'); rerender(); },
+    // Synchronisation
+    syncEnable: () => syncEnableDialog(),
+    syncConnect: () => syncConnectDialog(false),
+    syncReconnect: () => syncConnectDialog(!!session.key),
+    syncNow: async () => { if (!syncOn()) { toast(sync.message || 'Synchronisation indisponible', 'error'); return; } if (savePending) await persist(); if (prefs.syncDirty) await pushNow(); else await pullNow(); if (sync.status === 'ok') toast('Synchronisé', 'ok'); },
+    syncDisconnect: async () => {
+      if (!(await confirmBox({ title: 'Déconnecter cet appareil ?', text: 'La synchronisation s’arrête ici. Tes données restent sur cet appareil et dans le coffre en ligne.', ok: 'Déconnecter' }))) return;
+      if (syncOn() && prefs.syncDirty) await pushNow();
+      clearSyncPrefs(); session.auth = null; setSync(); rerender(); toast('Appareil déconnecté');
+    },
+    syncDelete: async () => {
+      if (!(await confirmBox({ title: 'Supprimer le coffre en ligne ?', text: 'La copie chiffrée sera effacée du serveur. Tes autres appareils ne pourront plus se synchroniser. Les données de cet appareil sont conservées.', ok: 'Supprimer en ligne', danger: true }))) return;
+      try {
+        const r = await apiCall('DELETE', '/api/vault');
+        if (!r.ok && r.status !== 404) { toast(r.data?.error || 'Suppression impossible', 'error'); return; }
+        clearSyncPrefs(); session.auth = null; setSync(); rerender(); toast('Coffre en ligne supprimé');
+      } catch { toast('Serveur injoignable', 'error'); }
+    },
     // Réglages
     theme: (el) => { prefs.theme = el.dataset.t; savePrefs(); applyTheme(); rerender(); },
     changeMaster: () => changeMasterDialog(),
@@ -1363,7 +1602,7 @@
     },
     wipe: async () => {
       const ok = await confirmBox({ title: 'Tout effacer ?', text: 'Le coffre, les codes 2FA, les tâches et les notes seront supprimés de cet appareil. Sans sauvegarde, c’est irréversible.', ok: 'Effacer définitivement', danger: true });
-      if (!ok) return; Store.clear(); session = { key: null, salt: null, data: null }; showLock(); toast('Toutes les données ont été effacées');
+      if (!ok) return; Store.clear(); clearSyncPrefs(); session = { key: null, salt: null, data: null, iter: ITER, auth: null }; showLock(); toast('Toutes les données de cet appareil ont été effacées');
     },
   };
   function undoToast(msg, undo) {
@@ -1436,6 +1675,50 @@
         codeCache.clear(); save(); closeModal(); rerender(); toast(id ? 'Code enregistré' : `Code ${o.issuer} ajouté`, 'ok');
       } catch (e) { err.textContent = e.message || 'Clé invalide.'; }
     },
+    syncEnable: async (f) => {
+      const err = $('#seErr'); err.textContent = '';
+      const id = f.id.value.trim().toLowerCase();
+      if (!/^[a-z0-9][a-z0-9._-]{2,63}$/.test(id)) { err.textContent = 'Identifiant invalide : 3 caractères minimum, lettres minuscules, chiffres, point ou tiret.'; return; }
+      const btn = f.querySelector('.btn.primary'); btn.disabled = true; btn.textContent = 'Chiffrement…';
+      try {
+        await persist(false);
+        const s = Store.read();
+        try { await decryptJSON(await deriveKey(f.pw.value, unb64(s.salt), s.iter || ITER), s.iv, s.ct); }
+        catch { err.textContent = 'Mot de passe maître incorrect.'; btn.disabled = false; btn.textContent = 'Activer'; return; }
+        const auth = await deriveAuth(f.pw.value, session.salt, session.iter || ITER);
+        const r = await apiCall('POST', '/api/vault', { id, auth, salt: s.salt, iter: s.iter || ITER, iv: s.iv, ct: s.ct }, { id: null, auth: null });
+        if (!r.ok) { err.textContent = r.status === 409 ? 'Cet identifiant est déjà pris. Si c’est ton coffre, utilise « J’ai déjà un coffre en ligne ».' : (r.data?.error || 'Serveur injoignable.'); btn.disabled = false; btn.textContent = 'Activer'; return; }
+        prefs.syncId = id; prefs.syncVersion = r.data.version; prefs.syncDirty = false; savePrefs();
+        session.auth = auth; sync.needsReconnect = false; setSync('ok');
+        closeModal(); rerender(); toast('Synchronisation activée', 'ok');
+      } catch { err.textContent = 'Serveur injoignable.'; btn.disabled = false; btn.textContent = 'Activer'; }
+    },
+    syncConnect: async (f) => {
+      const err = $('#scErr'); err.textContent = '';
+      const id = f.id.value.trim().toLowerCase(), pw = f.pw.value, merge = !!f.dataset.merge && !!session.key;
+      const btn = f.querySelector('.btn.primary'); btn.disabled = true; btn.textContent = 'Connexion…';
+      const fail = (m) => { err.textContent = m; btn.disabled = false; btn.textContent = 'Se connecter'; };
+      try {
+        const sr = await apiCall('GET', `/api/vault/salt?id=${encodeURIComponent(id)}`, null, { id: null, auth: null });
+        if (!sr.ok) return fail(sr.status === 404 ? 'Aucun coffre en ligne avec cet identifiant.' : (sr.data?.error || 'Serveur injoignable.'));
+        const salt = unb64(sr.data.salt), iter = sr.data.iter;
+        const [key, auth] = await Promise.all([deriveKey(pw, salt, iter), deriveAuth(pw, salt, iter)]);
+        const r = await apiCall('GET', '/api/vault', null, { id, auth });
+        if (!r.ok) return fail(r.data?.error || 'Identifiant ou mot de passe incorrect.');
+        let data;
+        try { data = migrate(await decryptJSON(key, r.data.iv, r.data.ct)); } catch { return fail('Impossible de déchiffrer ce coffre avec ce mot de passe.'); }
+        if (merge) { if (savePending) await persist(false); data = mergeData(session.data, data); }
+        session = { key, salt, data, iter, auth };
+        prefs.syncId = id; prefs.syncVersion = r.data.version; prefs.syncDirty = merge; savePrefs();
+        sync.needsReconnect = false;
+        takeSnap(); await persist(false);
+        closeModal();
+        if ($('#app').hidden) enterApp(); else rerender();
+        setSync('ok');
+        if (merge) pushNow();
+        toast(merge ? 'Appareil reconnecté et données fusionnées' : 'Coffre récupéré. Bienvenue sur ce nouvel appareil.', 'ok');
+      } catch { fail('Serveur injoignable.'); }
+    },
     changeMaster: async (f) => {
       const err = $('#cmErr'); err.textContent = '';
       if (f.next.value.length < 8) { err.textContent = 'Utilise au moins 8 caractères.'; return; }
@@ -1446,9 +1729,22 @@
         const s = Store.read();
         await decryptJSON(await deriveKey(f.current.value, unb64(s.salt), s.iter || ITER), s.iv, s.ct);
         const salt = crypto.getRandomValues(new Uint8Array(16));
-        session.key = await deriveKey(f.next.value, salt); session.salt = salt;
-        await persist(); closeModal(); toast('Mot de passe maître changé. Pense à refaire une sauvegarde.', 'ok');
-      } catch { btn.disabled = false; btn.textContent = 'Changer'; err.textContent = 'Le mot de passe actuel est incorrect.'; }
+        const key = await deriveKey(f.next.value, salt);
+        if (syncOn()) {
+          const newAuth = await deriveAuth(f.next.value, salt, ITER);
+          const { iv, ct } = await encryptJSON(key, session.data);
+          const r = await apiCall('PUT', '/api/vault', { iv, ct, baseVersion: prefs.syncVersion || 0, newAuth, salt: b64(salt), iter: ITER });
+          if (!r.ok) {
+            btn.disabled = false; btn.textContent = 'Changer';
+            err.textContent = r.status === 409 ? 'Le coffre en ligne vient de changer. Synchronise puis réessaie.' : (r.data?.error || 'Connexion au serveur nécessaire pour changer le mot de passe d’un coffre synchronisé.');
+            if (r.status === 409) pullNow();
+            return;
+          }
+          session.auth = newAuth; prefs.syncVersion = r.data.version; prefs.syncDirty = false; savePrefs(); setSync('ok');
+        }
+        session.key = key; session.salt = salt; session.iter = ITER;
+        await persist(false); closeModal(); toast('Mot de passe maître changé. Pense à refaire une sauvegarde.', 'ok');
+      } catch { btn.disabled = false; btn.textContent = 'Changer'; err.textContent = 'Le mot de passe actuel est incorrect ou le serveur est injoignable.'; }
     },
   };
   document.addEventListener('submit', (e) => {
