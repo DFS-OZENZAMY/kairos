@@ -5,6 +5,9 @@
  * le serveur ne reçoit que du texte chiffré et un jeton d'accès dérivé
  * du mot de passe maître, dont il ne garde que l'empreinte SHA-256.
  */
+import { handleTeam, TEAM_SCHEMA, ProjectRoom } from './team.js';
+export { ProjectRoom };
+
 const MAX_CT = 1_800_000;          // D1 limite une ligne à ~2 Mo
 const ID_RE = /^[a-z0-9][a-z0-9._-]{2,63}$/;
 const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
@@ -16,7 +19,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS attempts (id TEXT PRIMARY KEY, fails INTEGER NOT NULL, window_start INTEGER NOT NULL)`,
 ];
 let schemaReady = null;
-const ensureSchema = (db) => (schemaReady ||= db.batch(SCHEMA.map((s) => db.prepare(s))).catch((e) => { schemaReady = null; throw e; }));
+const ensureSchema = (db) => (schemaReady ||= db.batch([...SCHEMA, ...TEAM_SCHEMA].map((s) => db.prepare(s))).catch((e) => { schemaReady = null; throw e; }));
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -88,6 +91,8 @@ async function api(req, env, url) {
     const r = await db.prepare('SELECT salt, iter FROM vaults WHERE id = ?').bind(id).first();
     return r ? json({ salt: r.salt, iter: r.iter }) : err('Aucun coffre avec cet identifiant', 404);
   }
+
+  if (path.startsWith('/api/team')) return handleTeam(req, env, url);
 
   if (path !== '/api/vault') return err('Route inconnue', 404);
 
