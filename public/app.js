@@ -588,7 +588,46 @@
       <button class="icon-btn" data-act="delTask" data-id="${t.id}" aria-label="Supprimer">${ic('trash')}</button>
     </li>`;
   }
+  /* ---------- Tâches : vue Kanban ---------- */
+  const KCOLS = [['todo', 'À faire'], ['doing', 'En cours'], ['done', 'Terminé']];
+  const taskStatus = (t) => (t.done ? 'done' : t.status === 'doing' ? 'doing' : 'todo');
+  function setTaskStatus(t, s) {
+    t.done = s === 'done'; t.doneAt = t.done ? (t.doneAt || Date.now()) : null; t.status = s === 'doing' ? 'doing' : 'todo';
+  }
+  const taskModeSwitch = () => `<div class="chips seg" role="group" aria-label="Affichage des tâches">
+    ${[['list', 'Liste'], ['kanban', 'Kanban']].map(([m, l]) => `<button class="chip ${(prefs.taskMode || 'list') === m ? 'on' : ''}" data-act="taskMode" data-m="${m}" aria-pressed="${(prefs.taskMode || 'list') === m}">${l}</button>`).join('')}</div>`;
+  function kanbanCard(t) {
+    const st = taskStatus(t), idx = KCOLS.findIndex((c) => c[0] === st);
+    let due = ''; if (t.due) { const [l, c] = fmtDue(t.due); due = `<span class="tag ${t.done ? '' : c}">${esc(l)}</span>`; }
+    const pr = t.priority === 3 ? '<span class="tag late">Urgent</span>' : t.priority === 2 ? '<span class="tag warn">Important</span>' : '';
+    return `<li class="kcard p${t.priority || 0} ${t.done ? 'done' : ''}" draggable="true" data-card="${t.id}">
+      <button class="task-title" data-act="editTask" data-id="${t.id}">${esc(t.title)}</button>
+      <span class="task-meta">${pr}${due}${t.tag ? `<span class="tag">#${esc(t.tag)}</span>` : ''}</span>
+      <span class="kmove">
+        <button class="icon-btn" data-act="moveTask" data-id="${t.id}" data-to="${idx > 0 ? KCOLS[idx - 1][0] : ''}" ${idx === 0 ? 'disabled' : ''} aria-label="Déplacer vers ${idx > 0 ? esc(KCOLS[idx - 1][1]) : ''}">${ic('back')}</button>
+        <button class="icon-btn kfwd" data-act="moveTask" data-id="${t.id}" data-to="${idx < 2 ? KCOLS[idx + 1][0] : ''}" ${idx === 2 ? 'disabled' : ''} aria-label="Déplacer vers ${idx < 2 ? esc(KCOLS[idx + 1][1]) : ''}">${ic('back')}</button>
+      </span></li>`;
+  }
+  function kanbanView() {
+    const T = D().tasks, tags = [...new Set(T.map((t) => t.tag).filter(Boolean))];
+    const cols = KCOLS.map(([k, label]) => {
+      const list = T.filter((t) => taskStatus(t) === k).sort(k === 'done' ? (a, b) => (b.doneAt || 0) - (a.doneAt || 0) : taskSort);
+      return `<section class="kcol" data-col="${k}" aria-label="${label}">
+        <h2>${label} <span class="count">${list.length}</span></h2>
+        <ul class="klist">${list.map(kanbanCard).join('') || '<li class="kempty">Dépose une tâche ici</li>'}</ul></section>`;
+    }).join('');
+    return `<header class="page-head"><div><h1>Tâches</h1><p class="sub">Glisse les cartes d’une colonne à l’autre.</p></div><div class="actions">${taskModeSwitch()}</div></header>
+      <form class="add-row" data-form="addTask">
+        <input class="input grow" name="title" placeholder="Nouvelle tâche" autocomplete="off" aria-label="Nouvelle tâche" required>
+        <input type="hidden" name="due" value=""><input type="hidden" name="priority" value="0">
+        <input class="input" name="tag" placeholder="#étiquette" list="tagList" style="width:140px" aria-label="Étiquette" autocomplete="off">
+        <datalist id="tagList">${tags.map((t) => `<option value="${esc(t)}">`).join('')}</datalist>
+        <button class="btn primary" type="submit">${ic('plus')}<span>Ajouter</span></button>
+      </form>
+      <div class="kanban">${cols}</div>`;
+  }
   VIEWS.tasks = () => {
+    if ((prefs.taskMode || 'list') === 'kanban') return kanbanView();
     const tk = dayKey(); const T = D().tasks;
     const f = state.taskFilter;
     const counts = {
@@ -617,7 +656,7 @@
 
     return `
       <header class="page-head"><div><h1>Tâches</h1><p class="sub">Étoile une tâche pour la mettre dans ta journée.</p></div>
-        ${f === 'done' && counts.done ? '<div class="actions"><button class="btn" data-act="clearDone">Vider les terminées</button></div>' : ''}</header>
+        <div class="actions">${taskModeSwitch()}${f === 'done' && counts.done ? '<button class="btn" data-act="clearDone">Vider les terminées</button>' : ''}</div></header>
       <form class="add-row" data-form="addTask">
         <input class="input grow" name="title" placeholder="Nouvelle tâche" autocomplete="off" aria-label="Nouvelle tâche" required>
         <input class="input" type="date" name="due" value="${f === 'today' ? tk : ''}" aria-label="Échéance">
@@ -1495,7 +1534,9 @@
       el.innerHTML = ic(show ? 'eyeOff' : 'eye'); el.setAttribute('aria-label', show ? 'Masquer' : 'Afficher');
     },
     // Tâches
-    toggleTask: (el) => { const t = findTask(el.dataset.id); if (!t) return; t.done = !t.done; t.doneAt = t.done ? Date.now() : null; save(); rerender(); if (t.done) toast('Tâche terminée', 'ok'); },
+    toggleTask: (el) => { const t = findTask(el.dataset.id); if (!t) return; setTaskStatus(t, t.done ? 'todo' : 'done'); save(); rerender(); if (t.done) toast('Tâche terminée', 'ok'); },
+    taskMode: (el) => { prefs.taskMode = el.dataset.m === 'kanban' ? 'kanban' : 'list'; savePrefs(); rerender(); },
+    moveTask: (el) => { const t = findTask(el.dataset.id); const to = el.dataset.to; if (!t || !KCOLS.some((c) => c[0] === to)) return; setTaskStatus(t, to); save(); rerender(); },
     topTask: (el) => { const t = findTask(el.dataset.id); if (!t) return; t.top = !t.top; save(); rerender(); },
     delTask: (el) => {
       const i = D().tasks.findIndex((t) => t.id === el.dataset.id); if (i < 0) return;
@@ -1613,6 +1654,17 @@
     t.querySelector('button').onclick = () => { undo(); kill(); };
     setTimeout(kill, 5000);
   }
+
+  // Kanban : glisser-déposer des cartes entre colonnes
+  let dragId = null;
+  document.addEventListener('dragstart', (e) => { const c = e.target.closest?.('[data-card]'); if (!c) return; dragId = c.dataset.card; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); c.classList.add('dragging'); });
+  document.addEventListener('dragend', () => { dragId = null; document.querySelectorAll('.dragging,.over').forEach((n) => n.classList.remove('dragging', 'over')); });
+  document.addEventListener('dragover', (e) => { const col = e.target.closest?.('[data-col]'); if (!col || !dragId) return; e.preventDefault(); document.querySelectorAll('.kcol.over').forEach((n) => n !== col && n.classList.remove('over')); col.classList.add('over'); });
+  document.addEventListener('drop', (e) => {
+    const col = e.target.closest?.('[data-col]'); if (!col || !dragId) return;
+    e.preventDefault(); const t = findTask(dragId); dragId = null;
+    if (t && taskStatus(t) !== col.dataset.col) { setTaskStatus(t, col.dataset.col); save(); rerender(); } else rerender();
+  });
 
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');
