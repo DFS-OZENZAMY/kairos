@@ -537,15 +537,7 @@
     return `<header class="page-head"><div><h1>Jeux</h1><p class="sub">Une pause bien méritée, directement dans Kairos.</p></div></header>
       <article class="game-hero">
         <div class="game-art" aria-hidden="true">
-          <svg viewBox="0 0 400 240" preserveAspectRatio="xMidYMid slice"><defs>
-            <linearGradient id="gsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2F63B8"/><stop offset=".55" stop-color="#8EC3EC"/><stop offset="1" stop-color="#F6D9A8"/></linearGradient>
-            <radialGradient id="gsun" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#FFF4D0"/><stop offset="1" stop-color="#FFC56B" stop-opacity="0"/></radialGradient></defs>
-            <rect width="400" height="240" fill="url(#gsky)"/><circle cx="300" cy="120" r="70" fill="url(#gsun)"/>
-            <path d="M0 175 L60 140 L110 160 L170 120 L230 150 L280 105 L340 145 L400 128 V240 H0Z" fill="#7A7194" opacity=".75"/>
-            <path d="M0 200 Q100 170 200 185 T400 178 V240 H0Z" fill="#5E9A3D"/><path d="M0 222 Q120 205 230 214 T400 210 V240 H0Z" fill="#3F7D36"/>
-            <g fill="#D3CAB6"><rect x="178" y="150" width="6" height="34"/><rect x="192" y="146" width="6" height="38"/><rect x="206" y="146" width="6" height="38"/><rect x="220" y="150" width="6" height="34"/><rect x="170" y="182" width="64" height="7"/></g>
-            <rect x="196" y="40" width="8" height="112" fill="#FFE6A8" opacity=".55"/>
-            <g fill="#2F6B3A"><path d="M40 205 l14-38 14 38z"/><path d="M70 210 l11-30 11 30z"/><path d="M330 203 l13-36 13 36z"/><path d="M355 208 l10-28 10 28z"/></g></svg>
+          <img src="/jeux/aventure/img/nera.webp" alt="" loading="lazy">
           <div class="game-logo"><b>${esc(g.title.toUpperCase())}</b><span>${esc(g.subtitle)}</span></div>
         </div>
         <div class="game-body">

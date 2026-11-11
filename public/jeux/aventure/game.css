@@ -178,3 +178,4 @@ button.char-card:hover, button.char-card:focus-visible { border-color: var(--gol
 .char-card em { font-style: normal; font-size: 12px; text-transform: uppercase; letter-spacing: .16em; color: var(--muted); }
 .char-card small { color: var(--muted); font-size: 13px; line-height: 1.45; }
 .char-tag { position: absolute; top: 8px; right: 8px; font-style: normal; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 99px; background: var(--gold); color: #2A1803; }
+.char-art { width: 100%; max-width: 160px; aspect-ratio: 300 / 483; object-fit: cover; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }

@@ -620,3 +620,6 @@ dialog[open] { animation: pop .18s ease-out; }
 body.game-open { overflow: hidden; }
 @media (max-width: 860px) { .game-hero { grid-template-columns: 1fr; } .game-art { min-height: 220px; } }
 .game-actions a.btn { text-decoration: none; color: inherit; }
+.game-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
+.game-art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(8, 10, 24, .7)); }
+.game-logo { z-index: 1; }

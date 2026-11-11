@@ -117,7 +117,7 @@ async def main():
     await E("aube.interact('shard:forest')"); await pg.wait_for_timeout(600); await E("aube.finishDialogue()")
     ok(await E("aube.save.shards.forest") == True and await E("document.querySelectorAll('.shard.on').length") == 1, "Éclat de sève récupéré (1/3)")
     # boss de la crête
-    await E("aube.player.hp = aube.player.maxHp"); await E("aube.teleport(0, -128)"); await pg.wait_for_timeout(1800)   # le test ne pare pas les coups : on soigne avant le boss
+    await E("aube.player.dead = false; aube.player.hp = aube.player.maxHp"); await E("aube.teleport(0, -128)"); await pg.wait_for_timeout(1800)   # le test ne pare pas les coups : on soigne avant le boss
     boss = await E("(() => { const b = aube.enemies.find(e=>e.kind==='boss'); return {state: b.state, bar: !document.getElementById('bossBar').hidden} })()")
     ok(boss["state"] != "dormant" and boss["bar"], "le Colosse de cristal s’éveille : barre de vie du boss")
     await shot("/tmp/aube_boss.png")

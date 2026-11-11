@@ -526,7 +526,10 @@ async function warmShaders() {
    (noms des animations du fichier, os de la main qui tient l'arme, taille voulue en mètres).
    ===================================================================== */
 const CHARACTERS = {
-  nera: { name: 'Néra', species: 'Humaine', desc: 'Exploratrice d’Aube, agile et polyvalente.', icon: '🧭', builtin: true },
+  nera: { name: 'Néra', species: 'Humaine · exploratrice', desc: 'Aventurière d’Aube guidée par sa boussole magique, agile et polyvalente.', icon: '🧭', art: 'img/nera-card.webp', builtin: true,
+    // Dès qu'un fichier models/nera.glb existe, il remplace automatiquement la version en formes simples.
+    optional: { url: 'models/nera.glb', height: 1.72, hand: 'mixamorig:RightHand', grip: { pos: [0, 0.05, 0], rot: [90, 0, 0] },
+      anims: { idle: 'Idle', walk: 'Walk', run: 'Run', attack: 'Attack', jump: 'Jump', death: 'Death', cast: 'Cast', hurt: 'Hurt' } } },
   k7: { name: 'K-7', species: 'Androïde', desc: 'Automate d’un peuple disparu, réveillé par la lumière d’Aube. Lourd, mais infatigable.', icon: '🤖',
     url: 'models/RobotExpressive.glb', height: 2.05, hand: 'Palm2.R', grip: { pos: [0, 0, 0], rot: [90, 0, 0] },
     anims: { idle: 'Idle', walk: 'Walking', run: 'Running', attack: 'Punch', jump: 'Jump', death: 'Death', cast: 'Yes', hurt: 'No', win: 'Dance' },
@@ -561,6 +564,10 @@ function playAnim(m, state, blend = 0.18, force = false) {
 }
 async function loadCharacters() {
   for (const [id, def] of Object.entries(CHARACTERS)) {
+    if (def.builtin && def.optional) {           // modèle 3D facultatif (ex. models/nera.glb) : utilisé s'il est présent
+      try { const r = await fetch(def.optional.url, { method: 'HEAD' }); if (r.ok) { const m = await createModel({ name: def.name, ...def.optional }); m.holder.enabled = false; P.root.addChild(m.holder); m.hand = m.holder.findByName(def.optional.hand); MODELS.player[id] = m; CHARACTERS[id] = { ...def, ...def.optional }; } } catch { /* pas de modèle : version en formes simples */ }
+      continue;
+    }
     if (def.builtin) continue;
     try { const m = await createModel(def); m.holder.enabled = false; P.root.addChild(m.holder); m.hand = def.hand ? m.holder.findByName(def.hand) : null; MODELS.player[id] = m; }
     catch (e) { console.warn('Personnage indisponible :', def.url, e); delete CHARACTERS[id]; }
@@ -630,25 +637,64 @@ let P;   // rig 3D de l'héroïne
 function buildPlayer() {
   const root = new pc.Entity('Néra'); world.addChild(root);
   const body = new pc.Entity('corps'); root.addChild(body);
+  // Néra, d'après l'illustration du personnage : veste bleue ouverte, débardeur beige, cargo usé, sac à dos, corde, sacoche, boussole magique
   const M = {
-    tunic: mat('tunic', { diffuse: '#2C8C88', gloss: 0.3 }), skin: mat('skin', { diffuse: '#E9B48A', gloss: 0.35 }), hair: mat('hair', { diffuse: '#3A2418', gloss: 0.4 }),
-    pants: mat('pants', { diffuse: '#3C3A52', gloss: 0.2 }), boots: mat('boots', { diffuse: '#5B3A23', gloss: 0.3 }), cape: mat('cape', { diffuse: '#C3423A', gloss: 0.25, cull: pc.CULLFACE_NONE }),
-    belt: mat('belt', { diffuse: '#7A4E26', gloss: 0.4 }), gold: mat('gold', { diffuse: '#E0B04C', gloss: 0.8, metal: 0.9 }), blade: mat('blade', { diffuse: '#DDE8F5', gloss: 0.95, metal: 1, emissive: '#6FB8FF', ei: 0.25 }), eye: mat('eye', { diffuse: '#1A1A22' }),
+    jacket: mat('jacket', { diffuse: '#35507E', gloss: 0.3 }), top: mat('top', { diffuse: '#D9C9A6', gloss: 0.2 }), skin: mat('skin', { diffuse: '#F2BC94', gloss: 0.35 }),
+    hair: mat('hair', { diffuse: '#5A3826', gloss: 0.45 }), band: mat('band', { diffuse: '#6E7A3A', gloss: 0.25 }), pants: mat('cargo', { diffuse: '#6D6A4F', gloss: 0.18 }),
+    boots: mat('boots', { diffuse: '#6A4428', gloss: 0.35 }), cuff: mat('cuff', { diffuse: '#59573F', gloss: 0.15 }), leather: mat('leather', { diffuse: '#7A4E2C', gloss: 0.45 }),
+    pack: mat('pack', { diffuse: '#6B5536', gloss: 0.25 }), roll: mat('roll', { diffuse: '#C9B48A', gloss: 0.2 }), rope: mat('rope', { diffuse: '#C9A46A', gloss: 0.2 }),
+    cape: mat('cape', { diffuse: '#C3423A', gloss: 0.25, cull: pc.CULLFACE_NONE }), belt: mat('belt', { diffuse: '#7A4E26', gloss: 0.4 }),
+    gold: mat('gold', { diffuse: '#E0B04C', gloss: 0.8, metal: 0.9 }), blade: mat('blade', { diffuse: '#DDE8F5', gloss: 0.95, metal: 1, emissive: '#6FB8FF', ei: 0.25 }),
+    eye: mat('eye', { diffuse: '#1A1A22' }), iris: mat('iris', { diffuse: '#2E8C46', emissive: '#2FA35A', ei: 0.18, gloss: 0.9 }), gem: mat('gem', { diffuse: '#9C7BFF', emissive: '#8A6BFF', ei: 1.5, gloss: 0.95 }),
   };
-  prim('box', M.pants, body, [0, 0.98, 0], [0.5, 0.24, 0.32]);
-  prim('box', M.tunic, body, [0, 1.36, 0], [0.56, 0.6, 0.34]);
-  prim('box', M.belt, body, [0, 1.08, 0], [0.6, 0.1, 0.38]);
-  prim('box', M.gold, body, [0, 1.08, 0.19], [0.12, 0.1, 0.04]);
-  const head = new pc.Entity('tête'); head.setLocalPosition(0, 1.88, 0); body.addChild(head);
-  prim('sphere', M.skin, head, [0, 0, 0], [0.44, 0.48, 0.44]);
-  prim('sphere', M.hair, head, [0, 0.07, -0.05], [0.48, 0.44, 0.48]);
-  prim('box', M.hair, head, [0, -0.08, -0.2], [0.34, 0.42, 0.12]);
-  prim('box', M.eye, head, [-0.09, 0.02, 0.21], [0.05, 0.07, 0.02]); prim('box', M.eye, head, [0.09, 0.02, 0.21], [0.05, 0.07, 0.02]);
-  const capePivot = new pc.Entity('cape'); capePivot.setLocalPosition(0, 1.62, -0.18); body.addChild(capePivot);
-  prim('box', M.cape, capePivot, [0, -0.48, 0], [0.58, 0.96, 0.03]);
-  const limb = (x, y, matU, len, w, end, endMat) => { const p = new pc.Entity('membre'); p.setLocalPosition(x, y, 0); body.addChild(p); prim('box', matU, p, [0, -len / 2, 0], [w, len, w]); if (end) prim(end, endMat, p, [0, -len - 0.04, end === 'box' ? 0.04 : 0], end === 'box' ? [w * 1.15, 0.14, w * 1.5] : [w * 1.1, w * 1.1, w * 1.1]); return p; };
-  const armL = limb(-0.37, 1.62, M.tunic, 0.52, 0.16, 'sphere', M.skin), armR = limb(0.37, 1.62, M.tunic, 0.52, 0.16, 'sphere', M.skin);
-  const legL = limb(-0.14, 0.95, M.pants, 0.86, 0.2, 'box', M.boots), legR = limb(0.14, 0.95, M.pants, 0.86, 0.2, 'box', M.boots);
+  M.tunic = M.jacket;
+  // bassin, buste (débardeur) et veste ouverte
+  prim('sphere', M.pants, body, [0, 0.99, 0], [0.48, 0.3, 0.32]);
+  prim('capsule', M.top, body, [0, 1.37, 0], [0.42, 0.34, 0.27]);
+  prim('box', M.jacket, body, [-0.16, 1.39, 0.02], [0.17, 0.6, 0.31], [0, 0, -3]); prim('box', M.jacket, body, [0.16, 1.39, 0.02], [0.17, 0.6, 0.31], [0, 0, 3]);
+  prim('box', M.jacket, body, [0, 1.4, -0.11], [0.5, 0.58, 0.1]);
+  prim('sphere', M.jacket, body, [0, 1.67, -0.12], [0.46, 0.16, 0.28]);                       // capuche rabattue
+  prim('box', M.top, body, [-0.07, 1.6, 0.15], [0.03, 0.14, 0.02], [0, 0, 20]); prim('box', M.top, body, [0.07, 1.6, 0.15], [0.03, 0.14, 0.02], [0, 0, -20]);   // cordons
+  prim('sphere', M.gem, body, [0, 1.5, 0.15], [0.05, 0.07, 0.03], [0, 0, 0], false);          // pendentif
+  // ceinture, corde enroulée, sacoche en bandoulière
+  prim('cylinder', M.leather, body, [0, 1.1, 0], [0.5, 0.08, 0.36]); prim('box', M.gold, body, [0, 1.1, 0.18], [0.09, 0.07, 0.03]);
+  prim('cylinder', M.rope, body, [0.27, 1.0, 0.1], [0.3, 0.07, 0.3], [0, 0, 80]); prim('cylinder', mat('ropeIn', { diffuse: '#8E6E43' }), body, [0.28, 1.0, 0.1], [0.16, 0.08, 0.16], [0, 0, 80]);
+  prim('box', M.leather, body, [-0.3, 0.97, 0.1], [0.18, 0.22, 0.11]); prim('box', M.belt, body, [-0.3, 1.04, 0.16], [0.18, 0.06, 0.02]);
+  prim('box', M.leather, body, [0.02, 1.33, 0.17], [0.05, 0.86, 0.02], [0, 0, 38]);          // bandoulière
+  // grand sac à dos et tapis de sol roulé
+  prim('box', M.pack, body, [0, 1.36, -0.3], [0.46, 0.6, 0.24]); prim('box', M.leather, body, [0, 1.22, -0.43], [0.32, 0.2, 0.05]);
+  prim('cylinder', M.roll, body, [0, 1.75, -0.3], [0.2, 0.52, 0.2], [0, 0, 90]); prim('cylinder', M.leather, body, [0, 1.75, -0.3], [0.21, 0.04, 0.21], [0, 0, 90]);
+  prim('box', M.leather, body, [-0.14, 1.42, 0.15], [0.04, 0.46, 0.02]); prim('box', M.leather, body, [0.14, 1.42, 0.15], [0.04, 0.46, 0.02]);
+  // tête : yeux verts, cheveux bruns en bataille, bandeau olive
+  const head = new pc.Entity('tête'); head.setLocalPosition(0, 1.9, 0); body.addChild(head);
+  prim('capsule', M.skin, body, [0, 1.72, 0], [0.13, 0.08, 0.13]);
+  prim('sphere', M.skin, head, [0, 0, 0], [0.42, 0.47, 0.42]);
+  prim('sphere', M.hair, head, [0, 0.09, -0.05], [0.47, 0.4, 0.47]);
+  for (const [x, y, z, sx, rz, rx] of [[-0.18, 0.2, 0.06, 0.18, 30, -20], [0.16, 0.22, 0.08, 0.17, -28, -25], [0, 0.26, 0.1, 0.2, 0, -35], [-0.22, 0.02, -0.08, 0.16, 50, 10], [0.22, 0.0, -0.08, 0.16, -50, 10], [-0.1, 0.12, -0.2, 0.2, 15, 40], [0.1, 0.1, -0.22, 0.2, -15, 40], [0, -0.12, -0.2, 0.22, 0, 20]])
+    prim('cone', M.hair, head, [x, y, z], [sx, sx * 1.6, sx], [rx, 0, rz]);
+  prim('cylinder', M.band, head, [0, 0.12, 0.01], [0.45, 0.06, 0.45], [-8, 0, 0]);
+  prim('box', M.band, head, [0.02, 0.1, -0.24], [0.06, 0.16, 0.03], [0, 0, 25]);              // nœud du bandeau
+  prim('sphere', M.eye, head, [-0.09, 0.0, 0.19], [0.08, 0.075, 0.04]); prim('sphere', M.eye, head, [0.09, 0.0, 0.19], [0.08, 0.075, 0.04]);
+  prim('sphere', M.iris, head, [-0.09, 0.0, 0.205], [0.038, 0.04, 0.02], [0, 0, 0], false); prim('sphere', M.iris, head, [0.09, 0.0, 0.205], [0.038, 0.04, 0.02], [0, 0, 0], false);
+  prim('box', M.hair, head, [-0.09, 0.07, 0.2], [0.08, 0.015, 0.02], [0, 0, 8]); prim('box', M.hair, head, [0.09, 0.07, 0.2], [0.08, 0.015, 0.02], [0, 0, -8]);
+  prim('box', mat('lips', { diffuse: '#C9786A' }), head, [0, -0.13, 0.2], [0.07, 0.015, 0.02]);
+  const capePivot = new pc.Entity('cape'); capePivot.setLocalPosition(0, 1.62, -0.18); body.addChild(capePivot);   // (sans cape : le sac à dos la remplace)
+  // membres arrondis : manches de veste + gants, jambes cargo + poches + bottes à revers
+  const limb = (x, y, matU, len, w) => { const p = new pc.Entity('membre'); p.setLocalPosition(x, y, 0); body.addChild(p); prim('capsule', matU, p, [0, -len / 2, 0], [w, len / 2 + w * 0.25, w]); return p; };
+  const armL = limb(-0.36, 1.62, M.jacket, 0.5, 0.15), armR = limb(0.36, 1.62, M.jacket, 0.5, 0.15);
+  for (const a of [armL, armR]) { prim('sphere', M.leather, a, [0, -0.6, 0.01], [0.15, 0.16, 0.15]); prim('cylinder', M.leather, a, [0, -0.5, 0], [0.16, 0.06, 0.16]); }
+  const legL = limb(-0.14, 0.95, M.pants, 0.8, 0.21), legR = limb(0.14, 0.95, M.pants, 0.8, 0.21);
+  for (const [l, sx] of [[legL, -1], [legR, 1]]) {
+    prim('box', M.pants, l, [sx * 0.1, -0.32, 0.03], [0.04, 0.16, 0.14]);                   // poches cargo
+    prim('cylinder', M.cuff, l, [0, -0.66, 0], [0.24, 0.07, 0.24]);                           // revers
+    prim('capsule', M.boots, l, [0, -0.8, 0.02], [0.2, 0.14, 0.24]); prim('box', M.boots, l, [0, -0.89, 0.06], [0.2, 0.08, 0.32]);
+  }
+  // boussole magique lumineuse, main gauche
+  const compass = new pc.Entity('boussole'); compass.setLocalPosition(0, -0.62, 0.1); compass.setLocalEulerAngles(110, 0, 0); armL.addChild(compass);
+  prim('cylinder', M.gold, compass, [0, 0, 0], [0.18, 0.04, 0.18], [0, 0, 0], false); prim('cylinder', mat('compassGlow', { unlit: true, emissive: '#9FFFE6', ei: 4 }), compass, [0, 0.022, 0], [0.14, 0.01, 0.14], [0, 0, 0], false);
+  prim('box', mat('needle', { unlit: true, emissive: '#FF6A4A', ei: 3 }), compass, [0, 0.03, 0.02], [0.015, 0.008, 0.1], [0, 0, 0], false);
+  prim('cylinder', M.gold, compass, [0, 0.02, -0.11], [0.17, 0.01, 0.17], [-60, 0, 0], false);   // couvercle ouvert
+  const cl = new pc.Entity('lueur'); cl.addComponent('light', { type: 'omni', color: new pc.Color(0.85, 1, 0.95), intensity: 0.45, range: 1.8, castShadows: false }); cl.setLocalPosition(0, 0.12, 0); compass.addChild(cl);
   const sword = new pc.Entity('épée'); sword.setLocalPosition(0, -0.58, 0.05); sword.setLocalEulerAngles(80, 0, 0); armR.addChild(sword);
   prim('box', M.belt, sword, [0, 0, 0], [0.06, 0.24, 0.06]); prim('box', M.gold, sword, [0, 0.14, 0], [0.32, 0.05, 0.08]); prim('box', M.blade, sword, [0, 0.66, 0], [0.08, 0.98, 0.025]);
   const trail = prim('box', mat('trail', { unlit: true, emissive: '#BFE2FF', ei: 2.5, opacity: 0.0 }), sword, [0, 0.66, 0], [0.5, 1.05, 0.01], [0, 0, 0], false);
@@ -663,7 +709,7 @@ function buildPlayer() {
   prim('cylinder', mat('fluteBody', { diffuse: '#E7D6A8', gloss: 0.7, metal: 0.4 }), flute, [0, 0.2, 0], [0.05, 0.55, 0.05]);
   prim('box', M.gold, flute, [0, 0.45, 0], [0.07, 0.04, 0.07]);
   bow.enabled = staff.enabled = flute.enabled = false;
-  P = { root, body, head, armL, armR, legL, legR, cape: capePivot, sword, trail, mats: M, weapons: { sword, bow, staff, flute } };
+  P = { root, body, head, armL, armR, legL, legR, cape: capePivot, sword, trail, mats: M, compass, weapons: { sword, bow, staff, flute } };
   P.weaponHome = Object.fromEntries(Object.entries(P.weapons).map(([k, w]) => { const lp = w.getLocalPosition(), le = w.getLocalEulerAngles();
     return [k, { parent: w.parent, pos: [lp.x, lp.y, lp.z], rot: [le.x, le.y, le.z], gripRot: k === 'bow' ? [0, 90, 0] : [80, 0, 0] }]; }));
 }
@@ -720,6 +766,7 @@ function selectWeapon(id) {
   if (player.weapon === id) return;
   player.weapon = id; player.charging = false; player.attack = 0; play('select');
   for (const [k, e] of Object.entries(P.weapons)) e.enabled = k === id;
+  if (P.compass) P.compass.enabled = id !== 'bow';
   hud.weapons = null;
 }
 function cycleWeapon(dir) { const own = WEAPONS.filter((w) => save.items[w.id]); if (own.length < 2) return; const i = own.findIndex((w) => w.id === player.weapon); selectWeapon(own[(i + dir + own.length) % own.length].id); }
@@ -1553,6 +1600,7 @@ function animatePlayer(dt, sp) {
   if (p.spin > 0) { bodyY = (1 - p.spin / 0.45) * 360; aR = -90; aRz = 60; }
   if (p.dodge > 0) { bodyX = (1 - p.dodge / 0.45) * 360; }
   if (!p.grounded) { aL = -30; aR = p.attack > 0 ? aR : -150; P.legL.setLocalEulerAngles(-30, 0, 0); P.legR.setLocalEulerAngles(20, 0, 0); }
+  if (P.compass?.enabled && sp < 0.6 && p.attack <= 0 && p.cast <= 0 && !p.charging && p.dodge <= 0 && p.grounded) aL = -62 + Math.sin(state.time * 1.6) * 3;
   P.armR.setLocalEulerAngles(aR, 0, aRz); P.armL.setLocalEulerAngles(aL, 0, 8);
   P.body.setLocalEulerAngles(bodyX, bodyY, 0); P.body.setLocalPosition(0, p.dodge > 0 ? 0.55 : Math.abs(Math.sin(p.walk * 2)) * 0.06 * clamp(sp / 6, 0, 1), 0);
   P.cape.setLocalEulerAngles(10 + clamp(sp * 4, 0, 40) + Math.sin(state.time * 3) * 4, 0, 0);
@@ -1794,7 +1842,7 @@ function advance() {
   dlg.i++; if (dlg.i >= dlg.lines.length) return endDialogue(); showLine();
 }
 function choose(i) { const l = dlg.lines[dlg.i]; const c = l.choices?.[i]; if (!c) return; play('select'); const extra = c.act ? (c.act() || []) : []; dlg.lines.splice(dlg.i + 1, 0, ...extra, ...(c.next || [])); dlg.i++; if (dlg.i >= dlg.lines.length) return endDialogue(); showLine(); }
-function endDialogue() { $('dialogue').hidden = true; const d = dlg; dlg = null; state.mode = 'playing'; d.done?.(); setQuestChanged(); }
+function endDialogue() { $('dialogue').hidden = true; const d = dlg; dlg = null; state.mode = player.dead ? 'dead' : 'playing'; d.done?.(); setQuestChanged(); }
 $('dlgChoices').addEventListener('click', (e) => { const b = e.target.closest('[data-choice]'); if (b) choose(Number(b.dataset.choice)); });
 $('dialogue').addEventListener('click', (e) => { if (!e.target.closest('[data-choice]')) advance(); });
 addEventListener('keydown', (e) => { if (state.mode === 'dialogue' && /^Digit[1-3]$/.test(e.code)) choose(Number(e.code.slice(5)) - 1); });
@@ -1862,7 +1910,7 @@ function onPauseKey() {
   if (state.mode === 'playing') setPaused(true); else if (state.mode === 'paused') setPaused(false);
 }
 function openCharSelect() {
-  $('charCards').innerHTML = Object.entries(CHARACTERS).map(([id, c]) => `<button class="char-card" data-act="pickChar" data-char="${id}"><span class="char-icon">${c.icon}</span><b>${c.name}</b><em>${c.species}</em><small>${c.desc}</small>${c.builtin ? '' : '<i class="char-tag">Modèle 3D animé</i>'}</button>`).join('')
+  $('charCards').innerHTML = Object.entries(CHARACTERS).map(([id, c]) => `<button class="char-card" data-act="pickChar" data-char="${id}">${c.art ? `<img class="char-art" src="${c.art}" alt="">` : `<span class="char-icon">${c.icon}</span>`}<b>${c.name}</b><em>${c.species}</em><small>${c.desc}</small>${c.builtin ? '' : '<i class="char-tag">Modèle 3D animé</i>'}</button>`).join('')
     + UPCOMING.map((u) => `<div class="char-card locked"><span class="char-icon">${u.icon}</span><b>${u.name}</b><em>Bientôt</em><small>Modèle en préparation.</small></div>`).join('');
   screenStack = ['title']; show('charSelect');
 }
