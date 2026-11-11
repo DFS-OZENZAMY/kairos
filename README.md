@@ -31,12 +31,15 @@ Rubrique **Jeux** de la navigation. Le jeu s’ouvre en plein écran **dans Kair
 
 **Aube — Les Reliques du Gardien** : jeu d’aventure 3D construit sur le moteur open source **PlayCanvas 2.24** (licence MIT, embarqué dans `public/jeux/vendor/`), rendu **WebGPU** avec repli automatique sur **WebGL 2**.
 - Île générée procéduralement (relief, plages, chemins, forêts, rochers, océan, ciel), style low-poly, ombres en cascade, brouillard, post-traitement (tonalité ACES, bloom, vignette, occlusion ambiante en Ultra), 4 niveaux de qualité.
-- Héroïne animée procéduralement, combats en combo de trois coups, esquive avec invulnérabilité, endurance ; Brumelins, Gardiens de pierre et le Colosse de cristal (boss en deux phases, attaque de zone annoncée).
+- **Quatre armes** (touches 1 à 4, pouvoir sur F, mana) : épée (combo de trois coups, Tourbillon), arc des vents (tir chargé, volée de cinq flèches), bâton de braise (boule de feu explosive qui enflamme, nova de givre qui gèle), flûte d’Aube (onde sonore qui repousse et étourdit, mélodie de guérison). Esquive avec invulnérabilité, endurance, potions (R / T).
+- **Ennemis à réflexes et pouvoirs** : ils esquivent coups et projectiles, parent de face (gardiens), encerclent la joueuse et n’attaquent qu’à deux à la fois. Brumelins (acide ralentissant, division en mourant), Gardiens de pierre (charge, onde au sol, garde), Sylvains corrompus (téléportation, orbes à tête chercheuse, racines), Colosse de cristal en trois phases (bouclier alimenté par trois cristaux, renforts, rage et ondes de choc).
+- **Trésors** : dix coffres (certains gardés), or, potions, flèches, arc, bâton, amulette, anneau, talisman, rune de force, carte au trésor ; boutique et forge chez Ilyas ; inventaire (I).
+- Relief lissé et texturé, vagues animées, nuages, ombres douces.
 - Trois sanctuaires : vaincre les gardiens, lire la stèle et éveiller les runes dans le bon ordre, prendre l’éclat ; finale au Temple de l’Aube.
 - Sage Ilyas (dialogues à choix), totems de sauvegarde, pierres de cœur cachées, fleurs de soin, mini-carte et carte (M), quêtes, menus, réglages (qualité, rendu, sensibilité, champ de vision, volumes, axe inversé, secousses).
 - Musique générative et bruitages synthétisés (Web Audio), clavier et souris, manette, écran tactile. Sauvegarde locale (`localStorage`).
 
-Code : `public/jeux/aventure/` (`index.html`, `game.css`, `game.js`). Tests : `tests/aube_game_e2e.py` (partie complète, 21 vérifications) et `tests/games_hub_e2e.py` (rubrique Jeux dans Kairos, 8 vérifications).
+Code : `public/jeux/aventure/` (`index.html`, `game.css`, `game.js`). Tests : `tests/aube_game_e2e.py` (partie complète, 37 vérifications), `tests/aube_combat_e2e.py` (armes, magie, IA, boss, trésors, 25 vérifications) et `tests/games_hub_e2e.py` (rubrique Jeux dans Kairos, 8 vérifications).
 
 ## Synchronisation entre appareils (Cloudflare)
 

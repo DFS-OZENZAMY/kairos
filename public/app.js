@@ -522,9 +522,9 @@
      ========================================================= */
   const GAMES = [{
     id: 'aube', url: '/jeux/aventure/', title: 'Aube', subtitle: 'Les Reliques du Gardien', saveKey: 'aube.save.v1',
-    pitch: 'Le soleil ne se lève plus sur l’île d’Aube. Explore une île en 3D, affronte les gardiens corrompus, résous les énigmes des sanctuaires et rapporte les trois éclats au Temple.',
-    tags: ['Aventure 3D', 'Action', 'Énigmes', 'Solo'],
-    features: ['Île ouverte : forêt, ruines du lac, crête de cristal, temple', 'Combats en combo, esquive, endurance, boss en deux phases', 'Énigmes de runes, dialogues, quêtes et sauvegardes', 'Musique et bruitages générés en temps réel', 'Clavier et souris, manette, écran tactile'],
+    pitch: 'Le soleil ne se lève plus sur l’île d’Aube. Explore une île en 3D, combats à l’épée, à l’arc, par la magie ou à la flûte enchantée, déjoue des gardiens rusés, pille les coffres anciens et rapporte les trois éclats au Temple.',
+    tags: ['Aventure 3D', 'Action', 'Magie', 'Trésors', 'Énigmes'],
+    features: ['4 armes : épée, arc des vents, bâton de braise (feu et givre), flûte d’Aube (ondes et guérison)', 'Ennemis à réflexes et pouvoirs : esquives, parades, acide, charges, téléportation, racines', 'Colosse de cristal en trois phases : bouclier, renforts, rage', '10 coffres, or, potions, objets rares, boutique et inventaire', 'Île ouverte, énigmes de runes, quêtes, sauvegardes ; clavier et souris, manette, tactile'],
   }];
   function gameProgress(g) {
     try { const s = JSON.parse(localStorage.getItem(g.saveKey) || 'null'); if (!s) return null;
@@ -555,7 +555,7 @@
           <div class="game-actions"><button class="btn primary" data-act="playGame" data-game="${g.id}">${ic('play')}<span>${pr ? 'Continuer l’aventure' : 'Jouer'}</span></button>
             <a class="btn" href="${g.url}" target="_blank" rel="noopener">${ic('external')}<span>Ouvrir dans un onglet</span></a></div>
           <ul class="game-features">${g.features.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
-          <p class="hint">Commandes : ZQSD ou WASD pour bouger, souris pour la caméra, clic pour attaquer, clic droit pour esquiver, E pour interagir, M pour la carte, Échap pour la pause. Ta progression est enregistrée sur cet appareil.</p>
+          <p class="hint">Commandes : ZQSD ou WASD pour bouger, souris pour la caméra, clic pour attaquer (maintenir pour l’arc), clic droit pour esquiver, 1 à 4 pour changer d’arme, F pour le pouvoir, R et T pour les potions, E pour interagir, I pour l’inventaire, M pour la carte, Échap pour la pause. Ta progression est enregistrée sur cet appareil.</p>
           <p class="hint">Moteur <b>PlayCanvas</b> (open source, licence MIT) · rendu WebGPU ou WebGL 2.</p>
         </div>
       </article>`;
