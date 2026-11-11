@@ -1,4 +1,4 @@
-"""Partie complète d'Aube dans un navigateur sans écran (rendu logiciel). Usage : python3 tests/aube_game_e2e.py http://localhost:8953"""
+"""Partie complète d'Aube dans un navigateur sans écran (rendu logiciel). Usage : python3 tests/aube_game_e2e.py http://localhost:8960"""
 import asyncio, sys
 from playwright.async_api import async_playwright
 B = sys.argv[1]; out = []
@@ -86,7 +86,7 @@ async def main():
     ok(await E("aube.state") == "victory" and await E("aube.save.finished") == True, "finale : l’Aube se lève, écran de victoire")
     await shot("/tmp/aube_victory.png")
     # reprise depuis le menu
-    await pg.click("[data-act='toTitle']"); await pg.wait_for_timeout(500)
+    await pg.click("#victory [data-act='toTitle']"); await pg.wait_for_timeout(500)
     ok("3/3 éclats" in await E("document.getElementById('saveInfo').textContent"), "menu titre : « Continuer » avec la progression")
     ok(not errs, "aucune erreur JavaScript" + (f" : {errs[:2]}" if errs else ""))
     print(f"\n{sum(out)}/{len(out)} vérifications réussies")

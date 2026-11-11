@@ -598,3 +598,25 @@ dialog[open] { animation: pop .18s ease-out; }
 .kfwd svg { transform: scaleX(-1); }
 .kempty { color: var(--muted); font-size: 13px; text-align: center; padding: 18px 8px; border: 1px dashed var(--line-strong); border-radius: 12px; }
 @media (max-width: 760px) { .kanban { grid-template-columns: 1fr; } }
+
+/* ---------- Jeux ---------- */
+.game-hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; overflow: hidden; box-shadow: var(--shadow); }
+.game-art { position: relative; min-height: 320px; background: #0B1020; }
+.game-art svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.game-logo { position: absolute; left: 0; right: 0; bottom: 26px; text-align: center; color: #FFF3CF; text-shadow: 0 3px 18px rgba(0, 0, 0, .55); }
+.game-logo b { display: block; font-family: Georgia, "Times New Roman", serif; font-size: clamp(40px, 6vw, 64px); letter-spacing: .28em; padding-left: .28em; font-weight: 800; }
+.game-logo span { font-family: Georgia, serif; letter-spacing: .28em; text-transform: uppercase; font-size: 12px; }
+.game-body { padding: 24px 26px; display: grid; gap: 14px; align-content: start; }
+.game-pitch { font-size: 16px; line-height: 1.55; margin: 0; }
+.game-progress { display: grid; grid-template-columns: auto auto 1fr; gap: 4px 12px; align-items: center; background: var(--surface-2); border-radius: 12px; padding: 12px 14px; font-size: 14px; }
+.game-progress .meter { grid-column: 1 / -1; height: 6px; }
+.game-progress .meter i { display: block; height: 100%; background: linear-gradient(90deg, #F2C46D, #D99A3A); border-radius: inherit; }
+.game-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.game-features { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--muted); font-size: 14px; }
+.game-overlay { position: fixed; inset: 0; z-index: 200; background: #0B1020; }
+.game-overlay iframe { width: 100%; height: 100%; border: 0; display: block; }
+.game-close { position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .25); background: rgba(8, 10, 24, .55); color: #fff; font-size: 14px; opacity: .55; transition: opacity .15s; }
+.game-close:hover, .game-close:focus-visible { opacity: 1; }
+body.game-open { overflow: hidden; }
+@media (max-width: 860px) { .game-hero { grid-template-columns: 1fr; } .game-art { min-height: 220px; } }
+.game-actions a.btn { text-decoration: none; color: inherit; }

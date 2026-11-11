@@ -1,5 +1,5 @@
 /* Kairos — service worker : fonctionne hors ligne */
-const CACHE = 'kairos-v1.2.0';
+const CACHE = 'kairos-v1.3.0';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './pm.js', './pm.css', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {

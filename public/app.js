@@ -1,7 +1,7 @@
 /* Kairos — application locale chiffrée (tâches, habitudes, notes, coffre, 2FA, focus) */
 'use strict';
 (() => {
-  const VERSION = '1.2.0';
+  const VERSION = '1.3.0';
   const ITER = 310000;
   const STORE_KEY = 'kairos.vault.v1';
   const PREFS_KEY = 'kairos.prefs';
@@ -43,6 +43,7 @@
      Icônes
      ========================================================= */
   const ICONS = {
+    games: '<rect x="2.5" y="7" width="19" height="11" rx="5.5"/><path d="M7.5 10.5v4M5.5 12.5h4"/><circle cx="15.5" cy="11.5" r="1" fill="currentColor"/><circle cx="18" cy="14" r="1" fill="currentColor"/>',
     projects: '<rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="4" height="13" rx="1.5"/>',
     today: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     tasks: '<rect x="3" y="3" width="18" height="18" rx="5"/><path d="m8 12 3 3 5-6"/>',
@@ -448,7 +449,7 @@
     session = { key: null, salt: null, data: null, iter: ITER, auth: null };
     sync.needsReconnect = false; setSync();
     hmacKeys.clear(); codeCache.clear();
-    closeModal(); if ($('#palette').open) $('#palette').close();
+    closeModal(); if ($('#palette').open) $('#palette').close(); closeGame();
     showLock();
   }
 
@@ -456,7 +457,7 @@
      Coque de l'app et navigation
      ========================================================= */
   const NAV = [
-    ['today', 'Aujourd’hui'], ['tasks', 'Tâches'], ['projects', 'Projets'], ['habits', 'Habitudes'], ['notes', 'Notes'],
+    ['today', 'Aujourd’hui'], ['tasks', 'Tâches'], ['projects', 'Projets'], ['games', 'Jeux'], ['habits', 'Habitudes'], ['notes', 'Notes'],
     ['vault', 'Coffre'], ['otp', 'Codes 2FA'], ['focus', 'Focus'], ['settings', 'Réglages'],
   ];
   function enterApp() {
@@ -515,6 +516,63 @@
 
   /* Projets d'équipe (gestion de projet façon ClickUp) : module public/pm.js */
   VIEWS.projects = () => '<div id="pmRoot" class="pm-root"></div>';
+
+  /* =========================================================
+     Jeux : Aube — Les Reliques du Gardien (PlayCanvas, public/jeux/aventure)
+     ========================================================= */
+  const GAMES = [{
+    id: 'aube', url: '/jeux/aventure/', title: 'Aube', subtitle: 'Les Reliques du Gardien', saveKey: 'aube.save.v1',
+    pitch: 'Le soleil ne se lève plus sur l’île d’Aube. Explore une île en 3D, affronte les gardiens corrompus, résous les énigmes des sanctuaires et rapporte les trois éclats au Temple.',
+    tags: ['Aventure 3D', 'Action', 'Énigmes', 'Solo'],
+    features: ['Île ouverte : forêt, ruines du lac, crête de cristal, temple', 'Combats en combo, esquive, endurance, boss en deux phases', 'Énigmes de runes, dialogues, quêtes et sauvegardes', 'Musique et bruitages générés en temps réel', 'Clavier et souris, manette, écran tactile'],
+  }];
+  function gameProgress(g) {
+    try { const s = JSON.parse(localStorage.getItem(g.saveKey) || 'null'); if (!s) return null;
+      const n = Object.keys(s.shards || {}).length, m = Math.floor((s.play || 0) / 60);
+      return { n, finished: !!s.finished, time: m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min` };
+    } catch { return null; }
+  }
+  VIEWS.games = () => {
+    const g = GAMES[0], pr = gameProgress(g);
+    return `<header class="page-head"><div><h1>Jeux</h1><p class="sub">Une pause bien méritée, directement dans Kairos.</p></div></header>
+      <article class="game-hero">
+        <div class="game-art" aria-hidden="true">
+          <svg viewBox="0 0 400 240" preserveAspectRatio="xMidYMid slice"><defs>
+            <linearGradient id="gsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2F63B8"/><stop offset=".55" stop-color="#8EC3EC"/><stop offset="1" stop-color="#F6D9A8"/></linearGradient>
+            <radialGradient id="gsun" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#FFF4D0"/><stop offset="1" stop-color="#FFC56B" stop-opacity="0"/></radialGradient></defs>
+            <rect width="400" height="240" fill="url(#gsky)"/><circle cx="300" cy="120" r="70" fill="url(#gsun)"/>
+            <path d="M0 175 L60 140 L110 160 L170 120 L230 150 L280 105 L340 145 L400 128 V240 H0Z" fill="#7A7194" opacity=".75"/>
+            <path d="M0 200 Q100 170 200 185 T400 178 V240 H0Z" fill="#5E9A3D"/><path d="M0 222 Q120 205 230 214 T400 210 V240 H0Z" fill="#3F7D36"/>
+            <g fill="#D3CAB6"><rect x="178" y="150" width="6" height="34"/><rect x="192" y="146" width="6" height="38"/><rect x="206" y="146" width="6" height="38"/><rect x="220" y="150" width="6" height="34"/><rect x="170" y="182" width="64" height="7"/></g>
+            <rect x="196" y="40" width="8" height="112" fill="#FFE6A8" opacity=".55"/>
+            <g fill="#2F6B3A"><path d="M40 205 l14-38 14 38z"/><path d="M70 210 l11-30 11 30z"/><path d="M330 203 l13-36 13 36z"/><path d="M355 208 l10-28 10 28z"/></g></svg>
+          <div class="game-logo"><b>${esc(g.title.toUpperCase())}</b><span>${esc(g.subtitle)}</span></div>
+        </div>
+        <div class="game-body">
+          <div class="chips">${g.tags.map((t) => `<span class="chip">${esc(t)}</span>`).join('')}</div>
+          <p class="game-pitch">${esc(g.pitch)}</p>
+          ${pr ? `<div class="game-progress"><span>${pr.finished ? 'Partie terminée' : 'Ta progression'}</span><b>${pr.n}/3 éclats</b><span>${esc(pr.time)} de jeu</span><span class="meter"><i style="width:${Math.round(pr.n / 3 * 100)}%"></i></span></div>` : ''}
+          <div class="game-actions"><button class="btn primary" data-act="playGame" data-game="${g.id}">${ic('play')}<span>${pr ? 'Continuer l’aventure' : 'Jouer'}</span></button>
+            <a class="btn" href="${g.url}" target="_blank" rel="noopener">${ic('external')}<span>Ouvrir dans un onglet</span></a></div>
+          <ul class="game-features">${g.features.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
+          <p class="hint">Commandes : ZQSD ou WASD pour bouger, souris pour la caméra, clic pour attaquer, clic droit pour esquiver, E pour interagir, M pour la carte, Échap pour la pause. Ta progression est enregistrée sur cet appareil.</p>
+          <p class="hint">Moteur <b>PlayCanvas</b> (open source, licence MIT) · rendu WebGPU ou WebGL 2.</p>
+        </div>
+      </article>`;
+  };
+  function openGame(id) {
+    const g = GAMES.find((x) => x.id === id); if (!g) return;
+    closeGame();
+    const wrap = document.createElement('div'); wrap.id = 'gameOverlay'; wrap.className = 'game-overlay'; wrap.setAttribute('role', 'dialog'); wrap.setAttribute('aria-label', `${g.title} — ${g.subtitle}`);
+    wrap.innerHTML = `<iframe src="${g.url}" title="${esc(g.title)}" allow="fullscreen; gamepad; autoplay" allowfullscreen></iframe><button class="game-close" type="button" data-act="closeGame" aria-label="Quitter le jeu">✕</button>`;
+    document.body.append(wrap); document.body.classList.add('game-open');
+    wrap.querySelector('iframe').focus();
+  }
+  function closeGame() {
+    const w = document.getElementById('gameOverlay'); if (!w) return;
+    w.remove(); document.body.classList.remove('game-open');
+    if (state.view === 'games') render();
+  }
   AFTER.projects = () => window.KairosPM?.mount($('#pmRoot'));
 
   VIEWS.today = () => {
@@ -1526,6 +1584,8 @@
      ========================================================= */
   const findTask = (id) => D().tasks.find((t) => t.id === id);
   const ACT = {
+    playGame: (el) => openGame(el.dataset.game),
+    closeGame: () => closeGame(),
     close: () => closeModal(),
     palette: () => openPalette(),
     lock: () => lock(),
@@ -1876,6 +1936,12 @@
   });
 
   let lastActivity = Date.now();
+  // Le jeu (iframe de même origine) signale l'activité du joueur et demande sa fermeture
+  addEventListener('message', (e) => {
+    if (e.origin !== location.origin || !e.data || typeof e.data !== 'object') return;
+    if (e.data.type === 'kairos:activity') lastActivity = Date.now();
+    if (e.data.type === 'kairos:closeGame') { lastActivity = Date.now(); closeGame(); }
+  });
   ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach((ev) => addEventListener(ev, () => { lastActivity = Date.now(); }, { passive: true, capture: true }));
   setInterval(() => {
     const m = +prefs.autolock;

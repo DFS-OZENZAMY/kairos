@@ -688,7 +688,7 @@ const locked = () => document.pointerLockElement === canvas;
 canvas.addEventListener('mousedown', (e) => {
   Audio.init();
   if (state.mode !== 'playing') return;
-  if (!locked() && !isTouch) { canvas.requestPointerLock?.()?.catch?.(() => {}); }
+  if (!locked() && !isTouch && canvas.requestPointerLock) { const r = canvas.requestPointerLock(); r?.catch?.(() => {}); return; }   // 1er clic : capture seulement
   if (e.button === 0) pressed.add('Attack'); if (e.button === 2) pressed.add('Dodge');
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -741,18 +741,19 @@ function update(dtRaw) {
   const dt = Math.min(dtRaw, 1 / 20);
   state.time += dt;
   pollGamepad();
-  animateWorld(dt);
+  if (!window.aube?.skip?.world) animateWorld(dt);
   if (state.mode === 'title') { attractCamera(dt); }
   else if (state.mode === 'playing' || state.mode === 'dialogue' || state.mode === 'cinematic') {
     let gdt = dt;
     if (hitStop > 0) { hitStop -= dt; gdt = dt * 0.08; }
-    if (state.mode === 'playing') { state.play += dt; save.play = state.play; updatePlayer(gdt); updateEnemies(gdt); updatePickups(gdt); updateInteract(); checkZones(); }
+    const skip = window.aube?.skip || {};
+    if (state.mode === 'playing') { state.play += dt; save.play = state.play; if (!skip.player) updatePlayer(gdt); if (!skip.enemies) updateEnemies(gdt); if (!skip.pickups) updatePickups(gdt); if (!skip.interact) updateInteract(); if (!skip.zones) checkZones(); }
     else if (state.mode === 'dialogue') { updateEnemies(0); animatePlayer(dt, 0); updateDialogue(dt); }
     else updateCinematic(dt);
-    updateCamera(dt);
+    if (!skip.camera) updateCamera(dt);
   } else if (state.mode === 'dead') updateCamera(dt);
-  updateParticles(dt);
-  if (state.mode !== 'title' && state.mode !== 'loading') { hudT -= dt; if (hudT <= 0) { hudT = 0.2; if (!window.aube?.noMinimap) drawMinimap(); } updateHud(); }
+  if (!window.aube?.skip?.particles) updateParticles(dt);
+  if (state.mode !== 'title' && state.mode !== 'loading' && !window.aube?.skip?.hud) { hudT -= dt; if (hudT <= 0) { hudT = 0.2; if (!window.aube?.noMinimap) drawMinimap(); } updateHud(); }
   input.lookX = 0; input.lookY = 0; pressed.clear();
   if (settings.showFps) { fpsAcc += dtRaw; fpsN++; if (fpsAcc > 0.5) { $('fps').textContent = `${Math.round(fpsN / fpsAcc)} i/s · ${device.isWebGPU ? 'WebGPU' : 'WebGL 2'}`; fpsAcc = 0; fpsN = 0; } }
 }
@@ -1240,13 +1241,15 @@ function applySaveToWorld() {
 }
 function startGame(s) {
   save = s; state.play = s.play || 0; player.maxHp = 100 + s.hearts.length * 25; player.hp = player.maxHp; player.st = 100; player.dead = false;
-  applySaveToWorld(); populateEnemies();
+  const sk = window.aube?.skipStart || {};
+  if (!sk.apply) applySaveToWorld(); if (!sk.enemies) populateEnemies();
   const cp = CHECKPOINTS[s.talked ? s.checkpoint : 'camp'];
   placePlayer(s.talked ? cp.x : 2, s.talked ? cp.z : 140, s.talked ? null : Math.PI);
   show(null); screenStack = []; $('hud').hidden = false; $('touch').hidden = !isTouch;
-  state.mode = 'playing'; lastZone = null; setQuestChanged(); Audio.init(); Audio.setMode(save.finished ? 'dawn' : 'explore');
+  state.mode = sk.mode || 'playing'; lastZone = null; setQuestChanged(); if (!sk.audio) { Audio.init(); Audio.setMode(save.finished ? 'dawn' : 'explore'); }
   if (!s.talked) setTimeout(() => toast('Approche-toi d’Ilyas et appuie sur E pour lui parler.'), 1500);
-  if (!isTouch) canvas.requestPointerLock?.()?.catch?.(() => {});
+  // La souris n'est capturée qu'au premier clic dans la scène (geste explicite, comportement standard des jeux web)
+  if (!isTouch) setTimeout(() => toast('Clique dans le jeu pour diriger la caméra avec la souris.'), 400);
 }
 function placePlayer(x, z, yaw) {
   const [px, pz] = findLand(x, z, 0.6); player.x = px; player.z = pz; player.y = groundAt(px, pz); player.vx = player.vz = player.vy = 0;
@@ -1261,7 +1264,7 @@ function die() {
 function respawn() {
   player.dead = false; player.hp = player.maxHp; player.st = 100; populateEnemies(); applySaveToWorld();
   const cp = CHECKPOINTS[save.checkpoint] || CHECKPOINTS.camp; placePlayer(cp.x, cp.z + 2.5, null);
-  $('bossBar').hidden = true; show(null); state.mode = 'playing'; Audio.setMode('explore'); if (!isTouch) canvas.requestPointerLock?.()?.catch?.(() => {});
+  $('bossBar').hidden = true; show(null); state.mode = 'playing'; Audio.setMode('explore');
 }
 
 /* ---------- Finale ---------- */
