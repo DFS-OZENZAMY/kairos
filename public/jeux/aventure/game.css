@@ -83,7 +83,7 @@ dd { margin: 0; color: var(--muted); }
 .zone-title { position: absolute; top: 24%; left: 0; right: 0; text-align: center; font-family: var(--display); font-size: clamp(26px, 4.5vw, 52px); letter-spacing: .14em; color: var(--gold-2); text-shadow: 0 4px 30px rgba(0, 0, 0, .9); opacity: 0; transition: opacity 1.2s; }
 .zone-title.show { opacity: 1; }
 .zone-title small { display: block; font-size: .32em; letter-spacing: .3em; color: var(--muted); margin-top: 6px; }
-.boss { position: absolute; left: 50%; bottom: 9%; transform: translateX(-50%); width: min(560px, 80vw); text-align: center; display: grid; gap: 6px; }
+.boss { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); width: min(560px, 80vw); text-align: center; display: grid; gap: 6px; }
 .boss b { font-family: var(--display); letter-spacing: .14em; color: #E7D3FF; text-shadow: 0 2px 10px #000; }
 .boss .meter i { background: linear-gradient(180deg, #C9A2FF, #7B46D8); }
 .toasts { position: absolute; left: 18px; bottom: max(24px, env(safe-area-inset-bottom)); display: grid; gap: 8px; }
@@ -134,3 +134,35 @@ dd { margin: 0; color: var(--muted); }
   .dialogue { grid-template-columns: 1fr; } .portrait { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .floater, .toast, .dlg-next { animation: none; } .zone-title { transition: none; } }
+
+/* ---------- Arsenal, trésors, ennemis ---------- */
+.meter.mp { height: 7px; }
+.meter.mp i { background: linear-gradient(180deg, #8FC5FF, #3D7BE0); }
+.purse { font-size: 13px; font-weight: 600; text-shadow: 0 1px 3px #000; letter-spacing: .02em; }
+.weapons { position: absolute; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; gap: 8px; align-items: flex-end; }
+.wslot { position: relative; width: 54px; height: 54px; border-radius: 14px; background: rgba(8, 10, 24, .62); border: 1px solid rgba(255, 255, 255, .18); display: grid; place-items: center; font-size: 24px; transition: transform .12s, border-color .12s; }
+.wslot.on { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(242, 196, 109, .35), 0 0 18px rgba(242, 196, 109, .35); transform: translateY(-4px); }
+.wslot.locked { opacity: .35; }
+.wslot kbd { position: absolute; top: 3px; left: 5px; font: 700 10px var(--body); color: var(--muted); }
+.wslot em { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(8, 10, 24, .7); border-radius: inherit; font: 800 16px var(--body); font-style: normal; color: #fff; }
+.wpower { align-self: center; margin-left: 6px; font-size: 12px; color: var(--gold-2); text-shadow: 0 1px 3px #000; white-space: nowrap; }
+.crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px; border: 2px solid rgba(255, 255, 255, .85); border-radius: 50%; box-shadow: 0 0 4px #000; transition: transform .15s, border-color .15s; }
+.crosshair::after { content: ""; position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px; background: #fff; border-radius: 50%; }
+.crosshair.charge { transform: scale(.6); border-color: var(--gold); }
+.ebars { position: absolute; inset: 0; }
+.ebar { position: absolute; left: 0; top: 0; width: 56px; height: 6px; border-radius: 4px; background: rgba(8, 10, 24, .7); border: 1px solid rgba(255, 255, 255, .25); }
+.ebar i { display: block; height: 100%; background: linear-gradient(180deg, #FF8A7A, #C53A2E); border-radius: inherit; }
+.ebar span { position: absolute; left: 60px; top: -7px; font-size: 13px; }
+.loot { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); min-width: 280px; max-width: 420px; text-align: center; background: linear-gradient(180deg, rgba(40, 28, 8, .92), rgba(18, 12, 4, .94)); border: 1px solid var(--gold); border-radius: 16px; padding: 16px 22px; box-shadow: 0 0 40px rgba(242, 196, 109, .35); animation: lootin .35s ease-out; }
+.loot h3 { margin: 0 0 8px; font-family: var(--display); color: var(--gold-2); letter-spacing: .12em; }
+.loot p { margin: 6px 0; font-size: 15px; }
+.loot b { display: block; font-size: 17px; color: #FFE9B8; } .loot small { display: block; color: var(--muted); font-size: 13px; }
+@keyframes lootin { from { transform: translate(-50%, 12px) scale(.94); opacity: 0; } }
+.floater.gold { color: #FFD36B; } .floater.burn { color: #FF9A4D; font-size: 14px; } .floater.alert { color: #FF5A4A; font-size: 26px; }
+.inv-stats { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 14px; margin-bottom: 8px; }
+.inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.inv-item { position: relative; background: rgba(255, 255, 255, .05); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 4px; }
+.inv-item.locked { opacity: .45; } .inv-item small { color: var(--muted); line-height: 1.4; } .inv-item kbd { position: absolute; top: 8px; right: 10px; font-size: 11px; color: var(--muted); }
+#inventory h3 { font-family: var(--display); color: var(--gold); font-size: 14px; letter-spacing: .1em; margin: 14px 0 8px; }
+.tbtns { grid-template-columns: repeat(3, 58px); } .tbtns button { width: 58px; height: 58px; } .tbtns .big { grid-column: span 3; }
+@media (max-width: 640px) { .weapons { bottom: auto; top: 112px; left: auto; right: 12px; transform: none; flex-direction: column; } .wslot { width: 44px; height: 44px; font-size: 19px; } .wpower { display: none; } }

@@ -48,6 +48,8 @@
       <div class="hearts" id="hearts" aria-hidden="true"></div>
       <div class="meter hp" title="Vie"><i id="hpBar"></i><span id="hpText"></span></div>
       <div class="meter st" title="Endurance"><i id="stBar"></i></div>
+      <div class="meter mp" title="Mana"><i id="mpBar"></i></div>
+      <div class="purse" id="purse"></div>
     </div>
     <div class="quest"><b id="questTitle">Objectif</b><span id="questText"></span><span id="questSub"></span></div>
     <div class="shards" id="shards" aria-label="Éclats d’Aube"></div>
@@ -55,6 +57,10 @@
     <div class="prompt" id="prompt" hidden></div>
     <div class="zone-title" id="zoneTitle"></div>
     <div class="boss" id="bossBar" hidden><b id="bossName"></b><div class="meter"><i id="bossHp"></i></div></div>
+    <div class="weapons" id="weapons" aria-label="Armes"></div>
+    <div class="crosshair" id="crosshair" hidden></div>
+    <div class="ebars" id="ebars"></div>
+    <div class="loot" id="loot" hidden></div>
     <div class="toasts" id="toasts"></div>
     <div class="damage-flash" id="dmgFlash"></div>
     <div class="floaters" id="floaters"></div>
@@ -71,7 +77,7 @@
   <div id="pause" class="screen dim" hidden>
     <div class="panel">
       <h2>Pause</h2>
-      <nav class="menu"><button data-act="resume" class="primary">Reprendre</button><button data-act="map">Carte</button><button data-act="settings">Réglages</button><button data-act="controls">Commandes</button><button data-act="toTitle">Menu principal</button><button data-act="quit" class="ghost">↩ Retour à Kairos</button></nav>
+      <nav class="menu"><button data-act="resume" class="primary">Reprendre</button><button data-act="inventory">Inventaire</button><button data-act="map">Carte</button><button data-act="settings">Réglages</button><button data-act="controls">Commandes</button><button data-act="toTitle">Menu principal</button><button data-act="quit" class="ghost">↩ Retour à Kairos</button></nav>
       <p class="hint" id="pauseStats"></p>
     </div>
   </div>
@@ -105,11 +111,13 @@
         <div><h3>Clavier et souris</h3><dl>
           <dt>ZQSD / WASD</dt><dd>Se déplacer</dd><dt>Souris</dt><dd>Orienter la caméra (clic pour capturer)</dd>
           <dt>Maj</dt><dd>Courir</dd><dt>Espace</dt><dd>Sauter</dd><dt>Clic gauche / J</dt><dd>Attaquer (enchaînement ×3)</dd>
-          <dt>Clic droit / Ctrl / K</dt><dd>Esquiver (roulade)</dd><dt>E</dt><dd>Parler, activer, ramasser</dd>
+          <dt>Clic droit / Ctrl / K</dt><dd>Esquiver (roulade)</dd><dt>E</dt><dd>Parler, activer, ouvrir un coffre</dd>
+          <dt>1 · 2 · 3 · 4</dt><dd>Épée · Arc · Bâton de braise · Flûte</dd><dt>F</dt><dd>Pouvoir de l’arme (tourbillon, volée, nova de givre, mélodie)</dd>
+          <dt>Maintenir clic (arc)</dt><dd>Bander l’arc puis relâcher</dd><dt>R / T</dt><dd>Potion de vie / de mana</dd><dt>I</dt><dd>Inventaire</dd>
           <dt>M</dt><dd>Carte</dd><dt>Échap / P</dt><dd>Pause</dd><dt>Molette</dt><dd>Distance de la caméra</dd></dl></div>
         <div><h3>Manette</h3><dl>
           <dt>Stick gauche</dt><dd>Se déplacer</dd><dt>Stick droit</dt><dd>Caméra</dd><dt>A</dt><dd>Sauter</dd><dt>X</dt><dd>Attaquer</dd>
-          <dt>B</dt><dd>Esquiver</dd><dt>Y / RB</dt><dd>Interagir</dd><dt>LB</dt><dd>Courir</dd><dt>Start</dt><dd>Pause</dd><dt>Select</dt><dd>Carte</dd></dl>
+          <dt>B</dt><dd>Esquiver</dd><dt>Y / RB</dt><dd>Interagir</dd><dt>RT</dt><dd>Pouvoir</dd><dt>Croix ◀ ▶</dt><dd>Changer d’arme</dd><dt>Croix ▲ ▼</dt><dd>Potions</dd><dt>LB</dt><dd>Courir</dd><dt>Start</dt><dd>Pause</dd><dt>Select</dt><dd>Carte</dd></dl>
           <h3>Écran tactile</h3><p class="hint">Joystick à gauche, glisser à droite pour la caméra, boutons d’action à droite.</p></div>
       </div>
       <div class="row"><button data-act="back" class="primary">Retour</button></div>
@@ -125,6 +133,11 @@
       <p>Monde, modèles et animations générés procéduralement ; musique et bruitages synthétisés en temps réel (Web Audio).</p>
       <div class="row"><button data-act="back" class="primary">Retour</button></div>
     </div>
+  </div>
+
+  <!-- Inventaire -->
+  <div id="inventory" class="screen dim" hidden>
+    <div class="panel wide"><h2>Inventaire</h2><div id="invBody"></div><div class="row"><button data-act="closeInv" class="primary">Fermer (I)</button></div></div>
   </div>
 
   <!-- Carte -->
@@ -153,7 +166,7 @@
   <div id="touch" class="touch" hidden>
     <div class="stick" id="stick"><i id="stickKnob"></i></div>
     <div class="tbtns">
-      <button data-touch="attack" class="big">⚔</button><button data-touch="jump">⤒</button><button data-touch="dodge">↻</button><button data-touch="interact">E</button>
+      <button data-touch="attack" class="big">⚔</button><button data-touch="power">✦</button><button data-touch="weapon">⇄</button><button data-touch="jump">⤒</button><button data-touch="dodge">↻</button><button data-touch="interact">E</button><button data-touch="potion">🧪</button>
     </div>
   </div>
 

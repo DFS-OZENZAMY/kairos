@@ -46,7 +46,7 @@ function noise(x, y) {
 }
 const fbm = (x, y, o = 4) => { let s = 0, a = 0.5, f = 1, n = 0; for (let i = 0; i < o; i++) { s += a * noise(x * f, y * f); n += a; a *= 0.5; f *= 2.03; } return s / n; };
 
-const WORLD = 560, N = 192, CELL = WORLD / N, HALF = WORLD / 2, SEA = 0;
+const WORLD = 560, N = 256, CELL = WORLD / N, HALF = WORLD / 2, SEA = 0;
 function shape(x, z) {
   const r = Math.hypot(x * 0.95, z) + fbm(x * 0.006 + 3.1, z * 0.006 - 1.7, 4) * 45;
   const land = 1 - smooth(165, 245, r);
@@ -199,7 +199,18 @@ const Audio = (() => {
     wrong: () => { tone(110, 0.35, 'square', 0.12); tone(104, 0.35, 'square', 0.12); }, checkpoint: () => [0, 4, 7, 11, 14].forEach((n, i) => tone(hz(62 + n), 1.5, 'triangle', 0.1, i * 0.1)),
     blip: () => tone(hz(86 + Math.floor(Math.random() * 3)), 0.04, 'square', 0.025), enemyHit: () => { noiseBurst(0.1, 700, 1, 0.45); tone(90, 0.12, 'triangle', 0.15); },
     death: () => { noiseBurst(0.6, 600, 0.6, 0.4, 80); tone(hz(50), 0.8, 'sawtooth', 0.12); }, slam: () => { noiseBurst(0.7, 140, 0.5, 0.9, 50); tone(55, 0.6, 'sine', 0.4); },
-    open: () => [0, 3, 7, 10, 14].forEach((n, i) => tone(hz(57 + n), 1.2, 'sine', 0.12, i * 0.12)), select: () => tone(hz(81), 0.08, 'triangle', 0.08),
+    open: () => [0, 3, 7, 10, 14].forEach((n, i) => tone(hz(57 + n), 1.2, 'sine', 0.12, i * 0.12)),
+    arrow: () => noiseBurst(0.12, 2600, 3, 0.25, 900), arrowHit: () => noiseBurst(0.08, 1200, 2, 0.3),
+    boom: () => { noiseBurst(0.6, 200, 0.5, 0.8, 60); tone(70, 0.5, 'sine', 0.35); }, fireCast: () => noiseBurst(0.35, 600, 0.8, 0.35, 2400),
+    freeze: () => { [0, 3, 7, 12].forEach((n, i) => tone(hz(88 + n), 0.6, 'triangle', 0.08, i * 0.03)); noiseBurst(0.5, 5000, 1, 0.2, 1500); },
+    note: () => [0, 7, 12].forEach((n, i) => tone(hz(79 + n), 0.35, 'sine', 0.14, i * 0.05)),
+    melody: () => [0, 4, 7, 12, 7, 4, 9, 12].forEach((n, i) => tone(hz(74 + n), 0.45, 'sine', 0.11, i * 0.16)),
+    chest: () => { noiseBurst(0.3, 300, 1, 0.3); [0, 4, 7, 11, 14, 19].forEach((n, i) => tone(hz(72 + n), 0.8, 'triangle', 0.1, 0.2 + i * 0.07)); },
+    coin: () => [0, 7].forEach((n, i) => tone(hz(91 + n), 0.12, 'square', 0.05, i * 0.05)), spit: () => noiseBurst(0.2, 900, 1.5, 0.3, 300),
+    blink: () => { tone(hz(84), 0.3, 'sine', 0.12); tone(hz(72), 0.3, 'sine', 0.12, 0.08); }, block: () => { tone(900, 0.08, 'square', 0.12); noiseBurst(0.1, 3000, 2, 0.2); },
+    whoosh: () => noiseBurst(0.3, 500, 0.7, 0.3, 2000), charge: () => noiseBurst(0.6, 120, 0.6, 0.5, 400),
+    shield: () => [0, 5, 10].forEach((n, i) => tone(hz(60 + n), 1.2, 'sawtooth', 0.06, i * 0.1)), buy: () => [0, 4, 7].forEach((n, i) => tone(hz(84 + n), 0.15, 'triangle', 0.08, i * 0.05)),
+    select: () => tone(hz(81), 0.08, 'triangle', 0.08),
   };
   return { init, apply, SFX, setMode: (m) => { if (CHORDS[m] && mode !== m) { mode = m; step = 0; } }, get ready() { return !!ctx; } };
 })();
@@ -258,6 +269,45 @@ function prim(type, material, parent, pos = [0, 0, 0], scale = [1, 1, 1], rot = 
   e.setLocalPosition(...pos); e.setLocalScale(...scale); e.setLocalEulerAngles(...rot); parent.addChild(e); return e;
 }
 
+/* ---------- Textures procédurales (bruit périodique) ---------- */
+function tileNoise(size, octaves, seed, base = 4) {
+  const out = new Float32Array(size * size); let amp = 1, tot = 0;
+  for (let o = 0; o < octaves; o++) {
+    const cells = base << o, rnd = rng(seed + o * 97), lat = new Float32Array(cells * cells).map(() => rnd());
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const fx = x / size * cells, fy = y / size * cells, ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy;
+      const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty), L = (a, b) => lat[((b % cells + cells) % cells) * cells + ((a % cells + cells) % cells)];
+      out[y * size + x] += lerp(lerp(L(ix, iy), L(ix + 1, iy), sx), lerp(L(ix, iy + 1), L(ix + 1, iy + 1), sx), sy) * amp;
+    }
+    tot += amp; amp *= 0.55;
+  }
+  for (let i = 0; i < out.length; i++) out[i] /= tot;
+  return out;
+}
+function makeTexture(name, size, fill) {
+  const c = document.createElement('canvas'); c.width = c.height = size; const g = c.getContext('2d'), img = g.createImageData(size, size);
+  fill(img.data, size); g.putImageData(img, 0, 0);
+  const t = new pc.Texture(device, { name, width: size, height: size, format: pc.PIXELFORMAT_RGBA8, mipmaps: true, addressU: pc.ADDRESS_REPEAT, addressV: pc.ADDRESS_REPEAT,
+    minFilter: pc.FILTER_LINEAR_MIPMAP_LINEAR, magFilter: pc.FILTER_LINEAR, anisotropy: 8 });
+  t.setSource(c); return t;
+}
+function normalTexture(name, h, size, strength) {
+  return makeTexture(name, size, (d) => { for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const H = (a, b) => h[((b + size) % size) * size + ((a + size) % size)];
+    let nx = (H(x - 1, y) - H(x + 1, y)) * strength, ny = (H(x, y - 1) - H(x, y + 1)) * strength, nz = 1; const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+    const k = (y * size + x) * 4; d[k] = (nx * 0.5 + 0.5) * 255; d[k + 1] = (ny * 0.5 + 0.5) * 255; d[k + 2] = (nz * 0.5 + 0.5) * 255; d[k + 3] = 255; } });
+}
+function buildClouds() {
+  const m = mat('cloud', { diffuse: '#FFFFFF', emissive: '#C9D6E6', ei: 0.55, opacity: 0.88, gloss: 0 }); m.useFog = false; m.update();
+  W.clouds = new pc.Entity('nuages'); app.root.addChild(W.clouds);
+  for (let i = 0; i < 26; i++) {
+    const g = new pc.Entity('nuage'), a = R() * Math.PI * 2, r = 120 + R() * 380;
+    g.setLocalPosition(Math.cos(a) * r, 120 + R() * 60, Math.sin(a) * r); W.clouds.addChild(g);
+    const n = 4 + Math.floor(R() * 4);
+    for (let k = 0; k < n; k++) { const s = 14 + R() * 18; prim('sphere', m, g, [(k - n / 2) * 11 + R() * 6, R() * 4, (R() - 0.5) * 12], [s * 1.6, s * 0.55, s], [0, 0, 0], false); }
+  }
+}
+
 /* =====================================================================
    Construction du monde
    ===================================================================== */
@@ -281,23 +331,33 @@ async function buildWorld() {
   world = new pc.Entity('world'); app.root.addChild(world);
   await progress(0.1, 'Sculpture de l’île…');
   for (let j = 0; j <= N; j++) { for (let i = 0; i <= N; i++) HM[j * (N + 1) + i] = heightAt(i * CELL - HALF, j * CELL - HALF); if (j % 24 === 0) await progress(0.1 + j / N * 0.2); }
-  // Terrain (facettes plates, couleurs par face)
+  // Terrain lissé : normales par sommet (relief doux), couleurs par sommet, texture de détail et relief fin
   await progress(0.32, 'Peinture des paysages…');
-  const tg = new Geo();
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    const x0 = i * CELL - HALF, z0 = j * CELL - HALF, x1 = x0 + CELL, z1 = z0 + CELL;
-    const a = [x0, HM[j * (N + 1) + i], z0], b = [x1, HM[j * (N + 1) + i + 1], z0], c = [x0, HM[(j + 1) * (N + 1) + i], z1], d = [x1, HM[(j + 1) * (N + 1) + i + 1], z1];
-    const t1 = [a, c, b], t2 = [d, b, c];
-    for (const t of [t1, t2]) {
-      const cx = (t[0][0] + t[1][0] + t[2][0]) / 3, cz = (t[0][2] + t[1][2] + t[2][2]) / 3, ch = (t[0][1] + t[1][1] + t[2][1]) / 3;
-      const slope = Math.max(Math.abs(t[0][1] - t[1][1]), Math.abs(t[0][1] - t[2][1]), Math.abs(t[1][1] - t[2][1])) / CELL;
-      tg.tri(t[0], t[1], t[2], groundColor(cx, cz, ch, slope), 0.07);
-    }
+  const V = (N + 1) * (N + 1), pos = new Float32Array(V * 3), nrm = new Float32Array(V * 3), cols = new Uint8Array(V * 4), uvs = new Float32Array(V * 2);
+  const Hh = (i, j) => HM[clamp(j, 0, N) * (N + 1) + clamp(i, 0, N)];
+  for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
+    const k = j * (N + 1) + i, x = i * CELL - HALF, z = j * CELL - HALF, h = HM[k];
+    let nx = Hh(i - 1, j) - Hh(i + 1, j), ny = 2 * CELL, nz = Hh(i, j - 1) - Hh(i, j + 1); const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+    pos.set([x, h, z], k * 3); nrm.set([nx, ny, nz], k * 3); uvs.set([x / 7, z / 7], k * 2);
+    const c = groundColor(x, z, h, Math.sqrt(1 - ny * ny) / Math.max(ny, 0.2)), v = 1 + (fbm(x * 0.21, z * 0.21, 2)) * 0.12;
+    cols.set([SRGB2LIN[clamp(Math.round(c[0] * v * 255), 0, 255)], SRGB2LIN[clamp(Math.round(c[1] * v * 255), 0, 255)], SRGB2LIN[clamp(Math.round(c[2] * v * 255), 0, 255)], 255], k * 4);
   }
-  addMesh(tg, mat('terrain', { vertex: true, gloss: 0.12 }), { shadows: true, name: 'terrain' });
+  const idx = new Uint32Array(N * N * 6); let q = 0;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const a = j * (N + 1) + i, b = a + 1, c = a + N + 1, d = c + 1;
+    idx[q++] = a; idx[q++] = c; idx[q++] = b; idx[q++] = d; idx[q++] = b; idx[q++] = c;
+  }
+  const tm = new pc.Mesh(device); tm.setPositions(pos); tm.setNormals(nrm); tm.setColors32(cols); tm.setUvs(0, uvs); tm.setIndices(idx); tm.update(pc.PRIMITIVE_TRIANGLES);
+  const detail = tileNoise(256, 5, 77, 8);
+  const tmat = new pc.StandardMaterial(); tmat.useMetalness = true; tmat.metalness = 0; tmat.gloss = 0.16; tmat.diffuseVertexColor = true;
+  tmat.diffuseMap = makeTexture('terrain-détail', 256, (dd, S) => { for (let n = 0; n < S * S; n++) { const v = 200 + detail[n] * 55; dd[n * 4] = dd[n * 4 + 1] = dd[n * 4 + 2] = v; dd[n * 4 + 3] = 255; } });
+  tmat.normalMap = normalTexture('terrain-relief', detail, 256, 6); tmat.bumpiness = 0.9; tmat.update(); matCache.terrain = tmat;
+  const te = new pc.Entity('terrain'); te.addComponent('render', { meshInstances: [new pc.MeshInstance(tm, tmat)], castShadows: true, receiveShadows: true }); world.addChild(te);
   await progress(0.42, 'Remplissage de l’océan…');
   // Océan
-  const water = prim('plane', mat('water', { diffuse: '#1A6C82', opacity: 0.84, gloss: 0.92, metal: 0.05 }), world, [0, SEA, 0], [1600, 1, 1600], [0, 0, 0], false);
+  const wmat = mat('water', { diffuse: '#17627A', opacity: 0.86, gloss: 0.94, metal: 0.05 });
+  wmat.normalMap = normalTexture('vagues', tileNoise(256, 4, 31, 6), 256, 9); wmat.normalMapTiling = new pc.Vec2(160, 160); wmat.bumpiness = 0.7; wmat.update();
+  const water = prim('plane', wmat, world, [0, SEA, 0], [1600, 1, 1600], [0, 0, 0], false);
   water.render.receiveShadows = false; W.water = water;
   // Ciel : dôme dégradé + soleil
   const sky = new Geo(); const top = hex('#2F63B8'), mid = hex('#8EC3EC'), hor = hex('#F6D9A8');
@@ -315,8 +375,9 @@ async function buildWorld() {
   W.sunDisc = prim('sphere', mat('sun', { unlit: true, emissive: '#FFE6B0', ei: 6, diffuse: '#000000' }), world, [0, 0, 0], [60, 60, 60], [0, 0, 0], false);
   // Lumière et atmosphère
   sun = new pc.Entity('soleil');
-  sun.addComponent('light', { type: 'directional', color: new pc.Color(1, 0.92, 0.8), intensity: 1.55, castShadows: true, shadowDistance: 140, shadowResolution: Q().shadows, numCascades: Q().cascades, cascadeDistribution: 0.55, shadowBias: 0.25, normalOffsetBias: 0.06, shadowType: pc.SHADOW_PCF3_32F });
+  sun.addComponent('light', { type: 'directional', color: new pc.Color(1, 0.92, 0.8), intensity: 1.55, castShadows: true, shadowDistance: 140, shadowResolution: Q().shadows, numCascades: Q().cascades, cascadeDistribution: 0.55, shadowBias: 0.25, normalOffsetBias: 0.06, shadowType: settings.quality === 'low' ? pc.SHADOW_PCF1_32F : pc.SHADOW_PCF5_32F });
   sun.setLocalEulerAngles(52, 32, 0); app.root.addChild(sun);
+  buildClouds();
   app.scene.ambientLight = new pc.Color(0.38, 0.44, 0.56);
   app.scene.fog.type = pc.FOG_LINEAR; app.scene.fog.color = col('#B9D3EA'); app.scene.fog.start = 140 * Q().fog; app.scene.fog.end = 700 * Q().fog;
   await progress(0.5, 'Plantation de la forêt…');
@@ -380,7 +441,8 @@ function buildVegetation() {
 /* ---------- Temple, camp, ruines, cristaux, totems ---------- */
 const state = { mode: 'loading', time: 0, play: 0 };
 let save = null;
-const newSave = () => ({ v: 1, shards: {}, runes: {}, cleared: {}, hearts: [], checkpoint: 'camp', checkpoints: ['camp'], talked: 0, kills: 0, deaths: 0, play: 0, finished: false, created: Date.now() });
+const newSave = () => ({ v: 1, shards: {}, runes: {}, cleared: {}, hearts: [], checkpoint: 'camp', checkpoints: ['camp'], talked: 0, kills: 0, deaths: 0, play: 0, finished: false, created: Date.now(),
+  gold: 0, potions: { hp: 1, mp: 0 }, arrows: 0, items: { sword: true }, chests: [], upgrades: {} });
 const CHECKPOINTS = { camp: { x: 6, z: 146, name: 'Camp d’Ilyas' }, forest: { x: -88, z: 42, name: 'Totem de la forêt' }, lake: { x: 88, z: -4, name: 'Totem du lac' }, ridge: { x: 6, z: -100, name: 'Totem de la crête' }, temple: { x: 0, z: 28, name: 'Seuil du Temple' } };
 const GLYPHS = ['☀', '☾', '✦', '◆', '❂', '♆', '✧', '⚘'];
 const zoneObjs = {};
@@ -480,7 +542,8 @@ function applyQuality() {
 /* =====================================================================
    Personnages
    ===================================================================== */
-const player = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: Math.PI, hp: 100, maxHp: 100, st: 100, grounded: true, attack: 0, combo: 0, comboWindow: 0, dodge: 0, invuln: 0, hurtFlash: 0, walk: 0, stepT: 0, dead: false, lastHitT: 0 };
+const player = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: Math.PI, hp: 100, maxHp: 100, st: 100, grounded: true, attack: 0, combo: 0, comboWindow: 0, dodge: 0, invuln: 0, hurtFlash: 0, walk: 0, stepT: 0, dead: false, lastHitT: 0,
+  mp: 60, weapon: 'sword', powerCd: { sword: 0, bow: 0, staff: 0, flute: 0 }, primCd: 0, cast: 0, charging: false, chargeT: 0, spin: 0, slow: 0, rooted: 0, hot: 0 };
 let P;   // rig 3D de l'héroïne
 function buildPlayer() {
   const root = new pc.Entity('Néra'); world.addChild(root);
@@ -507,54 +570,603 @@ function buildPlayer() {
   const sword = new pc.Entity('épée'); sword.setLocalPosition(0, -0.58, 0.05); sword.setLocalEulerAngles(80, 0, 0); armR.addChild(sword);
   prim('box', M.belt, sword, [0, 0, 0], [0.06, 0.24, 0.06]); prim('box', M.gold, sword, [0, 0.14, 0], [0.32, 0.05, 0.08]); prim('box', M.blade, sword, [0, 0.66, 0], [0.08, 0.98, 0.025]);
   const trail = prim('box', mat('trail', { unlit: true, emissive: '#BFE2FF', ei: 2.5, opacity: 0.0 }), sword, [0, 0.66, 0], [0.5, 1.05, 0.01], [0, 0, 0], false);
-  P = { root, body, head, armL, armR, legL, legR, cape: capePivot, sword, trail, mats: M };
+  const bow = new pc.Entity('arc'); bow.setLocalPosition(0, -0.6, 0.06); armL.addChild(bow);
+  for (let i = -2; i <= 2; i++) prim('box', M.belt, bow, [0, i * 0.24, Math.abs(i) * -0.07], [0.05, 0.26, 0.05], [i * 14, 0, 0]);
+  prim('box', mat('string', { diffuse: '#EDE6D2' }), bow, [0, 0, -0.16], [0.012, 1.1, 0.012]);
+  const staff = new pc.Entity('bâton'); staff.setLocalPosition(0, -0.58, 0.05); staff.setLocalEulerAngles(80, 0, 0); armR.addChild(staff);
+  prim('cylinder', mat('staffWood', { diffuse: '#5A3A22', gloss: 0.35 }), staff, [0, 0.3, 0], [0.06, 1.7, 0.06]);
+  prim('sphere', mat('staffOrb', { unlit: true, emissive: '#FF8A2A', ei: 3.5 }), staff, [0, 1.2, 0], [0.22, 0.22, 0.22], [0, 0, 0], false);
+  prim('box', M.gold, staff, [0, 1.05, 0], [0.16, 0.08, 0.16]);
+  const flute = new pc.Entity('flûte'); flute.setLocalPosition(0, -0.58, 0.08); flute.setLocalEulerAngles(70, 0, 0); armR.addChild(flute);
+  prim('cylinder', mat('fluteBody', { diffuse: '#E7D6A8', gloss: 0.7, metal: 0.4 }), flute, [0, 0.2, 0], [0.05, 0.55, 0.05]);
+  prim('box', M.gold, flute, [0, 0.45, 0], [0.07, 0.04, 0.07]);
+  bow.enabled = staff.enabled = flute.enabled = false;
+  P = { root, body, head, armL, armR, legL, legR, cape: capePivot, sword, trail, mats: M, weapons: { sword, bow, staff, flute } };
 }
 const sharedMats = {};
 /** Change l'émissif d'un matériau seulement si l'état change (update() à chaque image recompilerait les shaders). */
 function setGlow(m, key, color, intensity) { if (m._glowKey === key) return; m._glowKey = key; m.emissive = col(color); m.emissiveIntensity = intensity; m.update(); }
 function setOpacity(m, v) { if (m.opacity === v) return; m.opacity = v; m.update(); }
+/* =====================================================================
+   Arsenal : épée, arc, bâton de braise (magie), flûte d'Aube (instrument)
+   ===================================================================== */
+const WEAPONS = [
+  { id: 'sword', name: 'Épée d’Aube', icon: '🗡', key: '1', power: 'Tourbillon', desc: 'Enchaînement de trois coups. Pouvoir (F) : Tourbillon, frappe tout autour de toi.' },
+  { id: 'bow', name: 'Arc des vents', icon: '🏹', key: '2', power: 'Volée', desc: 'Maintiens l’attaque pour bander l’arc. Pouvoir (F) : Volée de cinq flèches.' },
+  { id: 'staff', name: 'Bâton de braise', icon: '🔥', key: '3', power: 'Nova de givre', desc: 'Boule de feu explosive qui enflamme. Pouvoir (F) : Nova de givre, gèle les ennemis proches.' },
+  { id: 'flute', name: 'Flûte d’Aube', icon: '🎶', key: '4', power: 'Mélodie de guérison', desc: 'Note de lumière : onde sonore qui repousse et étourdit. Pouvoir (F) : Mélodie de guérison.' },
+];
+const ITEMS = {
+  bow: { name: 'Arc des vents', icon: '🏹', desc: 'Nouvelle arme (touche 2). Tire des flèches ; maintiens pour charger.' },
+  staff: { name: 'Bâton de braise', icon: '🔥', desc: 'Nouvelle arme magique (touche 3). Boules de feu et nova de givre.' },
+  flute: { name: 'Flûte d’Aube', icon: '🎶', desc: 'Instrument magique (touche 4). Ondes sonores et mélodie de guérison.' },
+  amulet: { name: 'Amulette d’Aube', icon: '📿', desc: '+30 de mana maximum.' },
+  ring: { name: 'Anneau de vélocité', icon: '💍', desc: '+10 % de vitesse de déplacement.' },
+  talisman: { name: 'Talisman de pierre', icon: '🪨', desc: '−20 % de dégâts subis.' },
+  map: { name: 'Carte au trésor', icon: '🗺', desc: 'Révèle tous les coffres sur la carte (M).' },
+  runeForce: { name: 'Rune de force', icon: 'ᚱ', desc: '+20 % de dégâts avec toutes les armes.' },
+};
+const CHESTS = [
+  { id: 'c1', x: -150, z: 58, rare: true, guard: ['slime', 'slime'], loot: { item: 'bow', arrows: 20 } },
+  { id: 'c2', x: 132, z: -34, rare: true, guard: ['golem'], loot: { item: 'staff', mp: 1 } },
+  { id: 'c3', x: 58, z: 165, loot: { gold: 60, hp: 1 } },
+  { id: 'c4', x: -42, z: -170, rare: true, loot: { item: 'amulet', gold: 40 } },
+  { id: 'c5', x: 186, z: 8, loot: { item: 'ring', gold: 30 } },
+  { id: 'c6', x: -196, z: 96, rare: true, loot: { item: 'talisman', gold: 20 } },
+  { id: 'c7', x: 18, z: 26, loot: { gold: 40, mp: 1 } },
+  { id: 'c8', x: -172, z: -12, loot: { item: 'map', gold: 25 } },
+  { id: 'c9', x: 150, z: -72, loot: { gold: 80, arrows: 15 } },
+  { id: 'c10', x: 92, z: -122, rare: true, guard: ['wisp'], loot: { item: 'runeForce', gold: 50 } },
+];
+const SHOP = [
+  { id: 'hp', label: 'Potion de vie', price: 30, desc: '+60 PV (touche R)', buy: () => { save.potions.hp++; } },
+  { id: 'mp', label: 'Potion de mana', price: 30, desc: '+60 mana (touche T)', buy: () => { save.potions.mp++; } },
+  { id: 'arrows', label: '10 flèches', price: 20, need: () => save.items.bow, buy: () => { save.arrows += 10; } },
+  { id: 'blade', label: 'Affûter l’épée', price: 120, once: true, desc: '+25 % de dégâts', buy: () => { save.upgrades.blade = true; } },
+  { id: 'armor', label: 'Armure renforcée', price: 150, once: true, desc: '+25 PV maximum', buy: () => { save.upgrades.armor = true; player.maxHp = stats().maxHp; player.hp = player.maxHp; } },
+];
+function stats() {
+  const it = save?.items || {}, up = save?.upgrades || {};
+  return { dmg: (up.blade ? 1.25 : 1) * (it.runeForce ? 1.2 : 1), def: it.talisman ? 0.8 : 1, speed: it.ring ? 1.1 : 1,
+    maxMp: 60 + (it.amulet ? 30 : 0), maxHp: 100 + (save?.hearts.length || 0) * 25 + (up.armor ? 25 : 0) };
+}
+const held = { attack: false };
+function selectWeapon(id) {
+  if (!save.items[id]) { const w = WEAPONS.find((x) => x.id === id); toast(`${w.name} : pas encore trouvé${id === 'flute' ? ' (Ilyas te la confiera)' : ' (cherche dans les coffres)'}.`); return; }
+  if (player.weapon === id) return;
+  player.weapon = id; player.charging = false; player.attack = 0; play('select');
+  for (const [k, e] of Object.entries(P.weapons)) e.enabled = k === id;
+  hud.weapons = null;
+}
+function cycleWeapon(dir) { const own = WEAPONS.filter((w) => save.items[w.id]); if (own.length < 2) return; const i = own.findIndex((w) => w.id === player.weapon); selectWeapon(own[(i + dir + own.length) % own.length].id); }
+function usePotion(kind) {
+  if (!save.potions[kind]) { toast(kind === 'hp' ? 'Aucune potion de vie.' : 'Aucune potion de mana.'); return; }
+  const st = stats();
+  if (kind === 'hp' && player.hp >= player.maxHp) return; if (kind === 'mp' && player.mp >= st.maxMp) return;
+  save.potions[kind]--; play('heal');
+  if (kind === 'hp') { player.hp = Math.min(player.maxHp, player.hp + 60); floater(player.x, player.y + 2.3, player.z, '+60', ''); burst(player.x, player.y + 1.2, player.z, 14, 'red', 3, 0.12, 0.8, -2); }
+  else { player.mp = Math.min(st.maxMp, player.mp + 60); burst(player.x, player.y + 1.2, player.z, 14, 'blue', 3, 0.12, 0.8, -2); }
+}
+const noMana = () => { if (state.time - (noMana.t || 0) > 1) { toast('Pas assez de mana.'); noMana.t = state.time; play('wrong'); } };
+function aimDir() {
+  const origin = new pc.Vec3(player.x, player.y + 1.5, player.z);
+  let dir = null;
+  if (locked()) { const f = camera.forward, cp = camera.getPosition(); dir = new pc.Vec3(cp.x + f.x * 45 - origin.x, cp.y + f.y * 45 - origin.y, cp.z + f.z * 45 - origin.z).normalize(); }
+  const ref = dir || new pc.Vec3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
+  let best = null, bestA = locked() ? 0.2 : 0.7;
+  for (const e of enemies) {
+    if (!e.alive || e.state === 'dormant') continue;
+    const to = new pc.Vec3(e.x - origin.x, e.y + e.d.h * 0.55 - origin.y, e.z - origin.z), d = to.length(); if (d > 38) continue;
+    to.mulScalar(1 / d); const a = Math.acos(clamp(to.x * ref.x + to.y * ref.y + to.z * ref.z, -1, 1)); if (a < bestA) { bestA = a; best = to; }
+  }
+  return { origin, dir: best || dir || new pc.Vec3(Math.sin(player.yaw), 0.03, Math.cos(player.yaw)) };
+}
+function weaponActions(dt, moving, wx, wz) {
+  const p = player, w = p.weapon, st = stats();
+  const atk = take('Attack') || take('KeyJ'), up = take('AttackUp'), pow = take('KeyF');
+  if (w === 'sword') {
+    if (atk && p.attack <= 0.12 && p.dodge <= 0 && p.spin <= 0 && p.st >= 8) {
+      p.combo = p.comboWindow > 0 ? (p.combo % 3) + 1 : 1; p.attack = p.combo === 3 ? 0.5 : 0.36; p.attackHit = false; p.comboWindow = p.attack + 0.35; p.st -= 8; play('swing');
+      const tgt = nearestEnemy(4.5); if (tgt) p.yaw = Math.atan2(tgt.x - p.x, tgt.z - p.z); else if (moving) p.yaw = Math.atan2(wx, wz);
+      enemyReflex(3.4);
+    }
+    if (pow && p.powerCd.sword <= 0 && p.dodge <= 0) {
+      if (p.st < 30) { toast('Pas assez d’endurance.'); } else { p.st -= 30; p.powerCd.sword = 4; p.spin = 0.45; p.attack = 0; play('whoosh'); enemyReflex(3.8); spinAttack(); }
+    }
+  } else if (w === 'bow') {
+    if (atk && !p.charging && p.primCd <= 0) { if (save.arrows <= 0) { toast('Plus de flèches : ouvre des coffres ou achète-en à Ilyas.'); play('wrong'); } else { p.charging = true; p.chargeT = 0; } }
+    if (p.charging) { p.chargeT += dt; if (up || (!held.attack && p.chargeT > 0.05)) fireArrow(); }
+    if (pow && p.powerCd.bow <= 0) { if (save.arrows < 5) toast('Il faut 5 flèches pour une volée.'); else volley(); }
+  } else if (w === 'staff') {
+    if (atk && p.primCd <= 0) {
+      if (p.mp < 15) noMana(); else { p.mp -= 15; p.primCd = 0.55; p.cast = 0.35; const { origin, dir } = aimDir(); p.yaw = Math.atan2(dir.x, dir.z);
+        shoot('fire', 'player', origin.x + dir.x, origin.y + dir.y, origin.z + dir.z, dir.x, dir.y, dir.z, 26 * st.dmg); play('fireCast'); }
+    }
+    if (pow && p.powerCd.staff <= 0) { if (p.mp < 35) noMana(); else { p.mp -= 35; p.powerCd.staff = 9; p.cast = 0.5; frostNova(); } }
+  } else if (w === 'flute') {
+    if (atk && p.primCd <= 0) { if (p.mp < 8) noMana(); else { p.mp -= 8; p.primCd = 0.8; p.cast = 0.45; soundWave(); } }
+    if (pow && p.powerCd.flute <= 0) {
+      if (p.mp < 40) noMana(); else { p.mp -= 40; p.powerCd.flute = 16; p.cast = 1.0; p.hot += 45; play('melody'); burst(p.x, p.y + 1.6, p.z, 26, 'gold', 2.5, 0.14, 1.6, -1.5); toast('Mélodie de guérison : ta vie se régénère.'); }
+    }
+  }
+}
+function fireArrow() {
+  const p = player; p.charging = false; p.primCd = 0.35; p.cast = 0.2;
+  const k = clamp(p.chargeT / 0.9, 0.3, 1), { origin, dir } = aimDir(); p.yaw = Math.atan2(dir.x, dir.z); save.arrows--;
+  shoot('arrow', 'player', origin.x + dir.x * 0.8, origin.y + dir.y * 0.8, origin.z + dir.z * 0.8, dir.x, dir.y + 0.02, dir.z, (12 + 26 * k) * stats().dmg, { speedMul: 0.6 + 0.5 * k }); play('arrow');
+}
+function volley() {
+  const p = player; p.powerCd.bow = 8; save.arrows -= 5; p.cast = 0.3; const { origin, dir } = aimDir(); const yaw = Math.atan2(dir.x, dir.z); p.yaw = yaw;
+  for (let i = -2; i <= 2; i++) { const a = yaw + i * 0.12; shoot('arrow', 'player', origin.x, origin.y, origin.z, Math.sin(a), dir.y + 0.03, Math.cos(a), 22 * stats().dmg); }
+  play('arrow'); setTimeout(() => play('arrow'), 60);
+}
+function spinAttack() {
+  const p = player; let hit = false;
+  for (const e of enemies) { if (!e.alive || e.state === 'dormant') continue; const dx = e.x - p.x, dz = e.z - p.z, d = Math.hypot(dx, dz); if (d - e.d.radius * 0.6 < 3.6) { damageEnemy(e, Math.round(20 * stats().dmg), dx / (d || 1), dz / (d || 1), false, 'melee'); hit = true; } }
+  ring(p.x, p.z, 3.6, 'gold', 0.35); if (hit) { hitStop = 0.06; shake(0.3); play('hit'); }
+}
+function frostNova() {
+  const p = player; play('freeze'); ring(p.x, p.z, 7.5, 'blue', 0.5); burst(p.x, p.y + 0.8, p.z, 40, 'blue', 9, 0.18, 1, 2);
+  for (const e of enemies) { if (!e.alive || e.state === 'dormant' || e.kind === 'pylon') continue; const d = dist2(e.x, e.z, p.x, p.z); if (d < 7.5) { e.frozen = e.kind === 'boss' ? 1.2 : 3; e.state = e.kind === 'boss' ? e.state : 'chase'; damageEnemy(e, Math.round(10 * stats().dmg), 0, 0, false, 'magic'); } }
+}
+function soundWave() {
+  const p = player; play('note'); ring(p.x + Math.sin(p.yaw) * 3, p.z + Math.cos(p.yaw) * 3, 5, 'gold', 0.4);
+  burst(p.x + Math.sin(p.yaw) * 1.5, p.y + 1.5, p.z + Math.cos(p.yaw) * 1.5, 12, 'gold', 6, 0.12, 0.6, 0);
+  for (const e of enemies) {
+    if (!e.alive || e.state === 'dormant' || e.kind === 'pylon') continue;
+    const dx = e.x - p.x, dz = e.z - p.z, d = Math.hypot(dx, dz), ang = Math.abs(((Math.atan2(dx, dz) - p.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+    if (d < 9 && ang < 1.3) { e.stun = e.kind === 'boss' ? 0.3 : 1.4; damageEnemy(e, Math.round(6 * stats().dmg), dx / (d || 1), dz / (d || 1), false, 'magic'); if (e.kind !== 'boss') { e.vx += dx / (d || 1) * 10; e.vz += dz / (d || 1) * 10; } }
+  }
+}
+
+/* ---------- Projectiles ---------- */
+const projectiles = [];
+const PROJ = {
+  arrow: { speed: 46, g: 9, radius: 0.4 }, fire: { speed: 28, g: 0, radius: 0.6 }, acid: { speed: 15, g: 14, radius: 0.5 },
+  orb: { speed: 12, g: 0, radius: 0.55, homing: 1.4 }, shard: { speed: 26, g: 0, radius: 0.55 },
+};
+function projEntity(kind) {
+  const e = new pc.Entity(kind); world.addChild(e);
+  if (kind === 'arrow') { prim('box', mat('belt'), e, [0, 0, 0], [0.05, 0.05, 0.9], [0, 0, 0], false); prim('box', mat('blade'), e, [0, 0, 0.5], [0.09, 0.09, 0.14], [0, 0, 0], false); prim('box', mat('cape'), e, [0, 0, -0.42], [0.02, 0.12, 0.16], [0, 0, 0], false); }
+  if (kind === 'fire') { prim('sphere', mat('fireball', { unlit: true, emissive: '#FF8A2A', ei: 5 }), e, [0, 0, 0], [0.55, 0.55, 0.55], [0, 0, 0], false); prim('sphere', mat('fire2'), e, [0, 0, 0], [0.8, 0.8, 0.8], [0, 0, 0], false);
+    const l = new pc.Entity('lueur'); l.addComponent('light', { type: 'omni', color: new pc.Color(1, 0.55, 0.2), intensity: 2, range: 7, castShadows: false }); e.addChild(l); }
+  if (kind === 'acid') prim('sphere', mat('acid', { diffuse: '#7BE05A', emissive: '#4FB82E', ei: 1.5, gloss: 0.9 }), e, [0, 0, 0], [0.45, 0.4, 0.45], [0, 0, 0], false);
+  if (kind === 'orb') { prim('sphere', mat('orb2', { unlit: true, emissive: '#B07CFF', ei: 4 }), e, [0, 0, 0], [0.5, 0.5, 0.5], [0, 0, 0], false); prim('sphere', mat('orbHalo', { unlit: true, emissive: '#6A3DD8', ei: 2, opacity: 0.4 }), e, [0, 0, 0], [0.9, 0.9, 0.9], [0, 0, 0], false); }
+  if (kind === 'shard') prim('cone', mat('crystal'), e, [0, 0, 0], [0.35, 1.1, 0.35], [90, 0, 0], false);
+  return e;
+}
+function shoot(kind, owner, x, y, z, dx, dy, dz, dmg, extra = {}) {
+  const d = PROJ[kind], l = Math.hypot(dx, dy, dz) || 1, sp = d.speed * (extra.speedMul || 1);
+  const p = { kind, owner, x, y, z, vx: dx / l * sp, vy: dy / l * sp, vz: dz / l * sp, dmg, life: 5, d, e: projEntity(kind), rolled: new Set(), ...extra };
+  if (extra.v) { p.vx = extra.v[0]; p.vy = extra.v[1]; p.vz = extra.v[2]; }
+  p.e.setPosition(x, y, z); projectiles.push(p); return p;
+}
+function updateProjectiles(dt) {
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i]; p.life -= dt;
+    if (p.d.homing && p.owner === 'enemy' && !player.dead) {
+      const tx = player.x - p.x, ty = player.y + 1.2 - p.y, tz = player.z - p.z, l = Math.hypot(tx, ty, tz) || 1, sp = p.d.speed;
+      p.vx = lerp(p.vx, tx / l * sp, p.d.homing * dt); p.vy = lerp(p.vy, ty / l * sp, p.d.homing * dt); p.vz = lerp(p.vz, tz / l * sp, p.d.homing * dt);
+    }
+    p.vy -= p.d.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+    p.e.setPosition(p.x, p.y, p.z); p.e.lookAt(p.x + p.vx, p.y + p.vy, p.z + p.vz);
+    if (p.kind === 'fire' && R() < dt * 30) burst(p.x, p.y, p.z, 1, 'fire', 1, 0.12, 0.4, -1);
+    let hit = null, impact = false;
+    if (p.owner === 'player') {
+      for (const e of enemies) {
+        if (!e.alive || e.state === 'dormant') continue;
+        const cy = e.y + e.d.h * 0.5, dd = Math.hypot(e.x - p.x, cy - p.y, e.z - p.z);
+        if (dd < e.d.radius + p.d.radius + e.d.h * 0.25) { hit = e; break; }
+        // réflexes : un ennemi qui voit venir le projectile peut l'esquiver
+        if (!p.rolled.has(e)) {
+          const rx = e.x - p.x, rz = e.z - p.z, sp = Math.hypot(p.vx, p.vz) || 1, ahead = (rx * p.vx + rz * p.vz) / sp, lat = Math.abs(rx * p.vz - rz * p.vx) / sp;
+          if (ahead > 0 && ahead < 9 && lat < 1.8) { p.rolled.add(e); if (R() < e.d.reflex * 0.85) { const s = (rx * p.vz - rz * p.vx) > 0 ? 1 : -1; enemyDodge(e, p.vz / sp * s, -p.vx / sp * s, 10); } }
+        }
+      }
+    } else if (!player.dead && Math.hypot(player.x - p.x, player.y + 1.1 - p.y, player.z - p.z) < 0.85 + p.d.radius) {
+      if (player.invuln <= 0) { hurtPlayer(p.dmg, p.x - p.vx, p.z - p.vz, p.kind === 'acid' ? { slow: 2.5 } : {}); impact = true; }
+    }
+    const g = groundAt(p.x, p.z);
+    if (p.y < g + 0.1 || p.y < SEA - 0.3) impact = true;
+    else for (const c of nearColliders(p.x, p.z)) if (c.on && c.tag !== 'barrier' && p.y < g + (c.tag === 'pillar' ? 9 : 3.5) && Math.hypot(p.x - c.x, p.z - c.z) < c.r) { impact = true; break; }
+    if (hit || impact || p.life <= 0) { onImpact(p, hit); p.e.destroy(); projectiles.splice(i, 1); }
+  }
+}
+function onImpact(p, e) {
+  const n = Math.hypot(p.vx, p.vz) || 1;
+  if (p.kind === 'arrow') { if (e) { damageEnemy(e, Math.round(p.dmg), p.vx / n, p.vz / n, R() < 0.15, 'arrow'); play('arrowHit'); } burst(p.x, p.y, p.z, 4, 'stone', 3, 0.08, 0.4); }
+  else if (p.kind === 'fire') {
+    play('boom'); shake(0.35); burst(p.x, p.y, p.z, 34, 'fire', 8, 0.2, 0.8, 3); ring(p.x, p.z, 3.6, 'fire', 0.3); flash(p.x, p.y, p.z, '#FF8A3A');
+    for (const x of enemies) { if (!x.alive || x.state === 'dormant') continue; const d = Math.hypot(x.x - p.x, x.y + x.d.h * 0.4 - p.y, x.z - p.z) - x.d.radius * 0.5; if (d < 3.6) { damageEnemy(x, Math.round(p.dmg * (1 - d / 6)), (x.x - p.x) / (d + 0.1), (x.z - p.z) / (d + 0.1), false, 'magic'); if (x.alive) { x.burn = 3; x.burnTick = 0.6; } } }
+  } else if (p.kind === 'acid') { burst(p.x, p.y, p.z, 12, 'slime', 4, 0.14, 0.6); if (dist2(player.x, player.z, p.x, p.z) < 1.8 && player.invuln <= 0 && Math.abs(player.y - p.y) < 2) hurtPlayer(Math.round(p.dmg * 0.6), p.x, p.z, { slow: 2.5 }); }
+  else burst(p.x, p.y, p.z, 12, 'violet', 4, 0.14, 0.6);
+}
+const flashes = [];
+function flash(x, y, z, color) { const l = new pc.Entity('éclair'); l.addComponent('light', { type: 'omni', color: col(color), intensity: 4, range: 12, castShadows: false }); l.setPosition(x, y + 1, z); world.addChild(l); flashes.push({ l, t: 0.25 }); }
+/* Anneaux au sol : télégraphes d'attaques ennemies et effets de sorts */
+const rings = [];
+function ring(x, z, r, color, life, warn = false) {
+  let g = rings.find((q) => !q.on && q.color === color);
+  if (!g) { const e = prim('cylinder', mat('ring:' + color, { unlit: true, emissive: parts.colors[color] || color, ei: warn ? 2 : 3, opacity: warn ? 0.38 : 0.5, cull: pc.CULLFACE_NONE }), world, [0, 0, 0], [1, 0.04, 1], [0, 0, 0], false); g = { e, color }; rings.push(g); }
+  g.on = true; g.t = 0; g.life = life; g.r = r; g.grow = !warn; g.e.enabled = true; g.e.setPosition(x, groundAt(x, z) + 0.08, z); g.e.setLocalScale(warn ? r * 2 : 0.5, 0.04, warn ? r * 2 : 0.5);
+  return g;
+}
+const hazards = [];
+function updateFx(dt) {
+  for (const g of rings) { if (!g.on) continue; g.t += dt; if (g.grow) { const s = lerp(0.5, g.r * 2, Math.min(1, g.t / g.life)); g.e.setLocalScale(s, 0.04, s); } if (g.t >= g.life) { g.on = false; g.e.enabled = false; } }
+  for (let i = flashes.length - 1; i >= 0; i--) { const f = flashes[i]; f.t -= dt; f.l.light.intensity = Math.max(0, f.t * 16); if (f.t <= 0) { f.l.destroy(); flashes.splice(i, 1); } }
+  for (let i = hazards.length - 1; i >= 0; i--) {
+    const h = hazards[i]; h.t -= dt;
+    if (h.kind === 'wave') {             // onde de choc du Colosse : saute pour l'éviter
+      h.r += dt * 10; h.ring.e.setLocalScale(h.r * 2, 0.04, h.r * 2); h.ring.t = 0;
+      const d = dist2(player.x, player.z, h.x, h.z);
+      if (!h.hit && Math.abs(d - h.r) < 0.9 && player.y - groundAt(player.x, player.z) < 0.4) { h.hit = true; hurtPlayer(16, h.x, h.z); }
+      if (h.r > 14) { h.ring.on = false; h.ring.e.enabled = false; hazards.splice(i, 1); }
+      continue;
+    }
+    if (h.t <= 0) {
+      if (dist2(player.x, player.z, h.x, h.z) < h.r) { hurtPlayer(h.dmg, h.x, h.z, h.root ? { root: h.root } : {}); }
+      burst(h.x, groundAt(h.x, h.z) + 0.3, h.z, 18, h.color, 6, 0.18, 0.7); if (h.root) for (let k = 0; k < 6; k++) burst(h.x, groundAt(h.x, h.z), h.z, 2, 'green', 3, 0.2, 0.9, 1);
+      hazards.splice(i, 1);
+    }
+  }
+}
+
+/* =====================================================================
+   Ennemis : réflexes, garde, encerclement, pouvoirs
+   ===================================================================== */
 function enemyRig(kind) {
   const root = new pc.Entity(kind); world.addChild(root);
   const body = new pc.Entity('corps'); root.addChild(body);
   const r = { root, body, kind, parts: {} };
-  if (kind === 'slime') {
-    const m = new pc.StandardMaterial(); m.diffuse = col('#4FC3A1'); m.emissive = col('#1E7F6C'); m.emissiveIntensity = 0.5; m.gloss = 0.85; m.useMetalness = true; m.metalness = 0; m.opacity = 0.88; m.blendType = pc.BLEND_NORMAL; m.update();
-    r.mat = m; r.parts.blob = prim('sphere', m, body, [0, 0.62, 0], [1.4, 1.2, 1.4]);
+  if (kind === 'slime' || kind === 'mini') {
+    const m = new pc.StandardMaterial(); m.diffuse = col('#4FC3A1'); m.emissive = col('#1E7F6C'); m.emissiveIntensity = 0.5; m.gloss = 0.88; m.useMetalness = true; m.metalness = 0; m.opacity = 0.86; m.blendType = pc.BLEND_NORMAL; m.update();
+    r.mat = m; const s = kind === 'mini' ? 0.6 : 1; body.setLocalScale(s, s, s);
+    r.parts.blob = prim('sphere', m, body, [0, 0.62, 0], [1.4, 1.2, 1.4]); prim('sphere', mat('slimeCore', { diffuse: '#2E8F74', emissive: '#3BD1A8', ei: 1.2 }), body, [0, 0.55, 0], [0.5, 0.45, 0.5]);
     prim('sphere', mat('eye'), body, [-0.24, 0.84, 0.6], [0.16, 0.22, 0.1]); prim('sphere', mat('eye'), body, [0.24, 0.84, 0.6], [0.16, 0.22, 0.1]);
+  } else if (kind === 'wisp') {
+    const robe = mat('wispRobe', { diffuse: '#2F4A3A', gloss: 0.3 }), eyeM = new pc.StandardMaterial(); eyeM.diffuse = new pc.Color(0, 0, 0); eyeM.emissive = col('#B07CFF'); eyeM.emissiveIntensity = 4; eyeM.update(); r.eyeMat = eyeM;
+    prim('cone', robe, body, [0, 0.9, 0], [1.1, 1.8, 1.1]); prim('box', mat('bark', { diffuse: '#5B4630', gloss: 0.2 }), body, [0, 1.9, 0], [0.7, 0.5, 0.5]);
+    const head = prim('sphere', mat('mask', { diffuse: '#D9D2BF', gloss: 0.5 }), body, [0, 2.35, 0.05], [0.55, 0.62, 0.5]);
+    prim('box', eyeM, head, [-0.18, 0.05, 0.45], [0.18, 0.1, 0.05]); prim('box', eyeM, head, [0.18, 0.05, 0.45], [0.18, 0.1, 0.05]);
+    for (let i = 0; i < 4; i++) prim('cone', mat('antler', { diffuse: '#7A6248' }), head, [(i < 2 ? -1 : 1) * (0.2 + (i % 2) * 0.15), 0.5, -0.05], [0.08, 0.5, 0.08], [0, 0, (i < 2 ? 1 : -1) * (20 + (i % 2) * 25)]);
+    const arm = (x) => { const p = new pc.Entity('bras'); p.setLocalPosition(x, 1.95, 0); body.addChild(p); prim('box', robe, p, [0, -0.45, 0], [0.18, 0.9, 0.18]); return p; };
+    r.parts.armL = arm(-0.45); r.parts.armR = arm(0.45);
+    r.parts.orb = prim('sphere', mat('orb2'), body, [0, 1.5, 0.8], [0.3, 0.3, 0.3], [0, 0, 0], false);
+  } else if (kind === 'pylon') {
+    const cm = mat('crystal'); for (let i = 0; i < 4; i++) prim('cone', cm, body, [(R() - 0.5) * 0.8, 0, (R() - 0.5) * 0.8], [0.6, 2.4 + R() * 1.6, 0.6], [(R() - 0.5) * 20, 0, (R() - 0.5) * 20]);
+    const l = new pc.Entity('lueur'); l.addComponent('light', { type: 'omni', color: col('#C59BFF'), intensity: 2.5, range: 9, castShadows: false }); l.setLocalPosition(0, 2, 0); body.addChild(l);
   } else {
     const boss = kind === 'boss', sc = boss ? 2.6 : 1;
     const stoneM = boss ? mat('bossStone', { diffuse: '#6E6690', gloss: 0.35 }) : mat('golemStone', { diffuse: '#8B8579', gloss: 0.2 });
     const eyeM = new pc.StandardMaterial(); eyeM.diffuse = new pc.Color(0, 0, 0); eyeM.emissive = col(boss ? '#D9B8FF' : '#7FE3FF'); eyeM.emissiveIntensity = 3; eyeM.update(); r.eyeMat = eyeM;
     body.setLocalScale(sc, sc, sc);
     prim('box', stoneM, body, [0, 1.25, 0], [1.25, 1.15, 0.9]); prim('box', mat('moss', { diffuse: '#6E8F4E', gloss: 0.1 }), body, [0, 1.86, -0.05], [1.3, 0.12, 0.95]);
+    prim('box', stoneM, body, [0, 0.82, 0.32], [0.9, 0.4, 0.3]);
     const head = prim('box', stoneM, body, [0, 2.15, 0.1], [0.62, 0.55, 0.6]);
     prim('box', eyeM, head, [-0.22, 0.05, 0.51], [0.2, 0.12, 0.05]); prim('box', eyeM, head, [0.22, 0.05, 0.51], [0.2, 0.12, 0.05]);
     const arm = (x) => { const p = new pc.Entity('bras'); p.setLocalPosition(x, 1.75, 0); body.addChild(p); prim('box', stoneM, p, [0, -0.55, 0], [0.42, 1.1, 0.46]); prim('box', stoneM, p, [0, -1.2, 0.05], [0.55, 0.45, 0.6]); return p; };
     r.parts.armL = arm(-0.88); r.parts.armR = arm(0.88);
     prim('box', stoneM, body, [-0.35, 0.35, 0], [0.42, 0.7, 0.5]); prim('box', stoneM, body, [0.35, 0.35, 0], [0.42, 0.7, 0.5]);
-    if (boss) { const cm = mat('crystal'); for (let i = 0; i < 7; i++) prim('cone', cm, body, [(R() - 0.5) * 1.1, 1.9 + R() * 0.3, -0.35 - R() * 0.2], [0.25, 0.7 + R() * 0.7, 0.25], [-30 + R() * 20, 0, (R() - 0.5) * 40]); }
+    if (boss) {
+      const cm = mat('crystal'); for (let i = 0; i < 9; i++) prim('cone', cm, body, [(R() - 0.5) * 1.2, 1.9 + R() * 0.3, -0.35 - R() * 0.2], [0.25, 0.7 + R() * 0.8, 0.25], [-30 + R() * 20, 0, (R() - 0.5) * 40]);
+      r.shield = prim('sphere', mat('bossShield', { unlit: true, emissive: '#B48CFF', ei: 1.4, opacity: 0.25, cull: pc.CULLFACE_NONE }), root, [0, 3.2, 0], [9, 9, 9], [0, 0, 0], false); r.shield.enabled = false;
+    }
   }
+  if (kind !== 'pylon') { const s = kind === 'boss' ? 6.5 : kind === 'golem' ? 3 : kind === 'wisp' ? 2.4 : kind === 'mini' ? 1 : 1.8;
+    r.ice = prim('sphere', mat('ice', { diffuse: '#BFE6FF', emissive: '#6FB8FF', ei: 0.6, opacity: 0.45, gloss: 0.95 }), root, [0, s * 0.45, 0], [s * 0.8, s, s * 0.8], [0, 0, 0], false); r.ice.enabled = false; }
   return r;
 }
 const ENEMY = {
-  slime: { name: 'Brumelin', hp: 32, speed: 4.4, range: 2.2, wind: 0.5, dmg: 12, radius: 0.8, aggro: 13 },
-  golem: { name: 'Gardien de pierre', hp: 70, speed: 3.1, range: 2.6, wind: 0.75, dmg: 20, radius: 1.1, aggro: 14 },
-  boss: { name: 'Colosse de cristal', hp: 300, speed: 3.4, range: 5, wind: 1.0, dmg: 28, radius: 2.6, aggro: 26 },
+  slime: { name: 'Brumelin', hp: 34, speed: 4.6, range: 2.2, wind: 0.45, dmg: 11, radius: 0.8, aggro: 14, h: 1.2, reflex: 0.2, gold: [3, 7] },
+  mini: { name: 'Petit Brumelin', hp: 12, speed: 5.4, range: 1.8, wind: 0.35, dmg: 6, radius: 0.5, aggro: 16, h: 0.7, reflex: 0.25, gold: [1, 2] },
+  golem: { name: 'Gardien de pierre', hp: 80, speed: 3.2, range: 2.7, wind: 0.7, dmg: 20, radius: 1.1, aggro: 15, h: 2.6, reflex: 0.08, block: 0.38, gold: [8, 14] },
+  wisp: { name: 'Sylvain corrompu', hp: 46, speed: 4.4, range: 12, wind: 0.55, dmg: 13, radius: 0.7, aggro: 20, h: 2.4, reflex: 0.45, gold: [10, 15] },
+  pylon: { name: 'Cristal du bouclier', hp: 40, speed: 0, range: 0, wind: 0, dmg: 0, radius: 1.1, aggro: 0, h: 3.2, reflex: 0, gold: [0, 0] },
+  boss: { name: 'Colosse de cristal', hp: 420, speed: 3.4, range: 5, wind: 1.0, dmg: 28, radius: 2.6, aggro: 26, h: 6.5, reflex: 0, gold: [120, 120] },
 };
-const enemies = [];
 function spawnEnemy(kind, x, z, zone = null) {
   const [px, pz] = findLand(x, z, 1.2), d = ENEMY[kind];
-  const e = { kind, d, zone, hx: px, hz: pz, x: px, z: pz, y: groundAt(px, pz), vx: 0, vz: 0, yaw: R() * 6, hp: d.hp, maxHp: d.hp, state: 'idle', t: R() * 3, cd: 1, alive: true, flash: 0, stag: 0, tx: px, tz: pz, phase2: false, hitsTaken: 0, rig: enemyRig(kind) };
+  const e = { kind, d, zone, hx: px, hz: pz, x: px, z: pz, y: groundAt(px, pz), vx: 0, vz: 0, yaw: R() * 6, hp: d.hp, maxHp: d.hp, state: 'idle', t: R() * 3, cd: 1, cd2: 2 + R() * 2, cd3: 2, alive: true,
+    flash: 0, stag: 0, tx: px, tz: pz, orbit: R() < 0.5 ? 1 : -1, inv: 0, frozen: 0, stun: 0, burn: 0, burnTick: 0, rig: enemyRig(kind) };
   e.rig.root.setPosition(e.x, e.y, e.z); enemies.push(e); return e;
 }
-function clearEnemies() { for (const e of enemies) e.rig.root.destroy(); enemies.length = 0; }
 function populateEnemies() {
-  clearEnemies();
-  if (!save.cleared.forest) [[-128, 20], [-112, 40], [-132, 42], [-104, 18]].forEach(([x, z]) => spawnEnemy('slime', x, z, 'forest'));
-  if (!save.cleared.lake) { [[104, -4], [122, -24]].forEach(([x, z]) => spawnEnemy('golem', x, z, 'lake')); [[116, 2], [100, -26], [128, -6]].forEach(([x, z]) => spawnEnemy('slime', x, z, 'lake')); }
-  if (!save.cleared.ridge) { [[2, -112], [-8, -122]].forEach(([x, z]) => spawnEnemy('golem', x, z, 'ridge-path')); W.boss = spawnEnemy('boss', 0, -146, 'ridge'); W.boss.state = 'dormant'; }
-  [[-58, 12], [58, -4], [6, -72], [-8, 92], [60, 60], [-60, -70]].forEach(([x, z], i) => spawnEnemy(i % 3 === 2 ? 'golem' : 'slime', x, z, null));
+  clearEnemies(); hazards.length = 0; projectiles.splice(0).forEach((p) => p.e.destroy());
+  if (!save.cleared.forest) { [[-128, 20], [-112, 40], [-104, 18]].forEach(([x, z]) => spawnEnemy('slime', x, z, 'forest')); spawnEnemy('wisp', -134, 38, 'forest'); }
+  if (!save.cleared.lake) { [[104, -4], [122, -24]].forEach(([x, z]) => spawnEnemy('golem', x, z, 'lake')); [[116, 2], [100, -26]].forEach(([x, z]) => spawnEnemy('slime', x, z, 'lake')); spawnEnemy('wisp', 126, -2, 'lake'); }
+  if (!save.cleared.ridge) { [[2, -112], [-8, -122]].forEach(([x, z]) => spawnEnemy('golem', x, z, 'ridge-path')); spawnEnemy('wisp', 12, -118, 'ridge-path'); W.boss = spawnEnemy('boss', 0, -146, 'ridge'); W.boss.state = 'dormant'; }
+  [[-58, 12, 'slime'], [58, -4, 'slime'], [6, -72, 'golem'], [-8, 92, 'slime'], [60, 60, 'wisp'], [-60, -70, 'golem']].forEach(([x, z, k]) => spawnEnemy(k, x, z, null));
+  for (const c of chests) if (!c.open && c.guard) c.guard.forEach((k, i) => spawnEnemy(k, c.x + (i ? 3 : -3), c.z + 2, 'guard'));
 }
+const meleeBusy = (x) => x.alive && x.kind !== 'boss' && (x.state === 'windup' || x.state === 'strike' || x.state === 'charge');
+function enemyDodge(e, sx, sz, speed) {
+  if (!e.alive || e.kind === 'boss' || e.kind === 'pylon' || e.frozen > 0 || e.stun > 0 || ['windup', 'strike', 'charge', 'recover', 'dormant', 'dodge'].includes(e.state)) return false;
+  if (e.kind === 'wisp' && e.cd3 <= 0) { blink(e); return true; }
+  const l = Math.hypot(sx, sz) || 1; e.state = 'dodge'; e.t = 0; e.vx = sx / l * speed; e.vz = sz / l * speed; e.inv = 0.3; play('whoosh'); return true;
+}
+function enemyReflex(reach) {     // réflexes face à un coup d'épée qui arrive
+  for (const e of enemies) {
+    if (!e.alive || ['boss', 'pylon'].includes(e.kind) || !['chase', 'idle', 'circle'].includes(e.state) || e.frozen > 0 || e.stun > 0) continue;
+    const dx = e.x - player.x, dz = e.z - player.z, d = Math.hypot(dx, dz); if (d > reach + 1.4) continue;
+    const ang = Math.abs(((Math.atan2(dx, dz) - player.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI); if (ang > 1.3) continue;
+    const r = R();
+    if (e.kind === 'golem' && r < e.d.block) { e.state = 'block'; e.t = 0; e.yaw = Math.atan2(-dx, -dz); continue; }
+    if (r < e.d.reflex) { const s = R() < 0.5 ? 1 : -1; enemyDodge(e, -dz / d * s + dx / d * 0.4, dx / d * s + dz / d * 0.4, 9); }
+  }
+}
+function blink(e) {
+  const p = player; burst(e.x, e.y + 1.2, e.z, 16, 'violet', 5, 0.15, 0.6); play('blink');
+  for (let k = 0; k < 8; k++) { const a = R() * Math.PI * 2, d = 10 + R() * 3, x = p.x + Math.cos(a) * d, z = p.z + Math.sin(a) * d;
+    if (terrainH(x, z) > 0.8 && dist2(x, z, e.hx, e.hz) < 28) { e.x = x; e.z = z; break; } }
+  e.y = groundAt(e.x, e.z); e.cd3 = 5 + R() * 2; e.inv = 0.25; e.state = 'chase'; burst(e.x, e.y + 1.2, e.z, 16, 'violet', 5, 0.15, 0.6);
+}
+function startWindup(e, atk, t) {
+  const p = player; e.state = 'windup'; e.atk = atk; e.t = 0; e.wind = t; e.tx = p.x; e.tz = p.z;
+  if (atk === 'stomp') e.warn = ring(e.x, e.z, 4.3, 'red', t, true);
+  if (atk === 'slam') { e.slamX = p.x; e.slamZ = p.z; e.warn = ring(p.x, p.z, 5.2, 'red', t, true); }
+  if (atk === 'charge') { const d = Math.hypot(p.x - e.x, p.z - e.z) || 1; e.cdx = (p.x - e.x) / d; e.cdz = (p.z - e.z) / d; play('charge'); }
+}
+function finishWindup(e, d) {
+  const p = player, D = e.d;
+  switch (e.atk) {
+    case 'melee':
+      if (e.kind === 'golem') { const dx = p.x - e.x, dz = p.z - e.z, ang = Math.abs(((Math.atan2(dx, dz) - e.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+        if (d < D.range + 0.6 && ang < 1.1) hurtPlayer(D.dmg, e.x, e.z); play('slam'); shake(0.25); e.state = 'recover'; e.t = 0; e.rec = 0.55; e.cd = 1.3 + R(); }
+      else { const l = d || 1; e.vx = (p.x - e.x) / l * 13; e.vz = (p.z - e.z) / l * 13; e.state = 'strike'; e.t = 0; e.hitDone = false; play('spit'); }
+      return;
+    case 'spit': {
+      const ox = e.x, oy = e.y + 1, oz = e.z, hx = p.x + p.vx * 0.5 - ox, hz = p.z + p.vz * 0.5 - oz, dist = Math.hypot(hx, hz) || 1, t = dist / 14;
+      shoot('acid', 'enemy', ox, oy, oz, 0, 0, 0, D.dmg, { v: [hx / t, ((p.y + 1) - oy + 0.5 * 14 * t * t) / t, hz / t] }); play('spit'); e.cd2 = 3.5 + R() * 2; e.state = 'chase'; return;
+    }
+    case 'stomp':
+      if (d < 4.4 && p.y - groundAt(p.x, p.z) < 0.5) hurtPlayer(20, e.x, e.z); play('slam'); shake(0.5); burst(e.x, e.y + 0.2, e.z, 26, 'stone', 7, 0.2, 0.7);
+      e.cd3 = 6 + R() * 2; e.state = 'recover'; e.t = 0; e.rec = 0.8; return;
+    case 'charge': e.state = 'charge'; e.t = 0; e.hitDone = false; return;
+    case 'cast': { const ox = e.x + Math.sin(e.yaw) * 0.8, oz = e.z + Math.cos(e.yaw) * 0.8; shoot('orb', 'enemy', ox, e.y + 1.8, oz, p.x - ox, p.y + 1.2 - e.y - 1.8, p.z - oz, D.dmg); play('blink'); e.cd = 2.2 + R() * 1.2; e.state = 'chase'; return; }
+    case 'root': hazards.push({ kind: 'root', x: e.tx, z: e.tz, r: 1.9, t: 1.0, dmg: 14, root: 1.3, color: 'green' }); ring(e.tx, e.tz, 1.9, 'green', 1.0, true); e.cd2 = 7 + R() * 2; e.state = 'chase'; return;
+    case 'slam':
+      if (dist2(p.x, p.z, e.slamX, e.slamZ) < 5.2 && p.y - groundAt(p.x, p.z) < 0.6) hurtPlayer(D.dmg, e.slamX, e.slamZ);
+      play('slam'); shake(0.9); burst(e.slamX, groundAt(e.slamX, e.slamZ) + 0.2, e.slamZ, 30, 'violet', 9, 0.25, 0.9);
+      if (e.enraged) hazards.push({ kind: 'wave', x: e.slamX, z: e.slamZ, r: 0.5, t: 99, ring: ring(e.slamX, e.slamZ, 1, 'violet', 99, true) });
+      e.cd = e.enraged ? 1.0 : e.phase2 ? 1.4 : 1.9; e.state = 'recover'; e.t = 0; e.rec = 0.7; return;
+    case 'volley': {
+      const yaw = Math.atan2(p.x - e.x, p.z - e.z); for (let i = -2; i <= 2; i++) { const a = yaw + i * 0.18; shoot('shard', 'enemy', e.x + Math.sin(a) * 3, e.y + 4, e.z + Math.cos(a) * 3, Math.sin(a), -0.08, Math.cos(a), 16); }
+      play('shield'); e.cd2 = e.enraged ? 3.5 : 5.5; e.state = e.shield ? 'shield' : 'chase'; return;
+    }
+  }
+}
+function startShield(e) {
+  e.shield = true; e.state = 'shield'; e.t = 0; e.rig.shield.enabled = true; play('shield'); shake(0.6);
+  e.pylons = [0, 1, 2].map((i) => { const a = i / 3 * Math.PI * 2 + 0.5, x = e.hx + Math.cos(a) * 15, z = e.hz + Math.sin(a) * 15; const py = spawnEnemy('pylon', x, z, 'pylon'); py.state = 'pylon'; return py; });
+  toast('Le Colosse s’entoure d’un bouclier ! Détruis les trois cristaux qui l’alimentent.');
+}
+function damageEnemy(e, dmg, nx, nz, crit, src = 'melee') {
+  if (!e.alive) return;
+  const top = e.y + e.d.h + 0.4;
+  if (e.kind === 'boss' && e.shield) { floater(e.x, top, e.z, 'Bouclier', 'crit'); burst(e.x, e.y + 3, e.z, 6, 'violet', 4, 0.14, 0.5); play('block'); return; }
+  if (e.inv > 0 && src !== 'burn') { floater(e.x, top, e.z, 'Esquive', ''); return; }
+  if (e.state === 'block' && (src === 'melee' || src === 'arrow')) {
+    const fa = Math.abs(((Math.atan2(player.x - e.x, player.z - e.z) - e.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+    if (fa < 1.25) { dmg = Math.max(1, Math.round(dmg * 0.2)); floater(e.x, top, e.z, `Paré ${dmg}`, ''); play('block'); burst(e.x + Math.sin(e.yaw), e.y + 1.6, e.z + Math.cos(e.yaw), 10, 'white', 6, 0.08, 0.3); e.hp -= dmg; if (e.hp <= 0) killEnemy(e); return; }
+  }
+  if (e.frozen > 0 && src !== 'burn' && src !== 'magic') dmg = Math.round(dmg * 1.3);
+  if (e.state === 'recover') dmg = Math.round(dmg * 1.4);
+  e.hp -= dmg; e.flash = 0.15; e.hitsTaken = (e.hitsTaken || 0) + 1;
+  if (src !== 'burn') { play('enemyHit'); burst(e.x, e.y + e.d.h * 0.5, e.z, 6, e.kind === 'slime' || e.kind === 'mini' ? 'slime' : e.kind === 'boss' || e.kind === 'pylon' || e.kind === 'wisp' ? 'violet' : 'stone', 6, 0.16, 0.6); }
+  floater(e.x, top, e.z, crit ? `${dmg} !` : `${dmg}`, crit ? 'crit' : src === 'burn' ? 'burn' : '');
+  if (e.kind !== 'boss' && e.kind !== 'pylon' && src !== 'burn') { const kb = e.kind === 'slime' || e.kind === 'mini' ? 10 : e.kind === 'wisp' ? 8 : 4; e.vx += nx * kb; e.vz += nz * kb; if (e.state === 'windup' && e.kind !== 'golem') { e.state = 'chase'; e.warn = null; } }
+  if (['idle', 'return'].includes(e.state)) e.state = 'chase';
+  if (e.kind === 'boss') {
+    if (!e.shieldDone && !e.shield && e.hp < e.maxHp * 0.6) startShield(e);
+    if (!e.phase2 && e.hp < e.maxHp * 0.35) { e.phase2 = true; toast('Le Colosse appelle ses serviteurs !'); ['slime', 'slime', 'wisp'].forEach((k, i) => { const s = spawnEnemy(k, e.x + (i - 1) * 7, e.z + 5, 'ridge-adds'); s.state = 'chase'; }); e.d = { ...e.d, speed: 4.2 }; shake(0.8); }
+    if (!e.enraged && e.hp < e.maxHp * 0.18) { e.enraged = true; toast('Le Colosse entre en rage : saute par-dessus ses ondes de choc !'); }
+  }
+  if (e.hp <= 0) killEnemy(e);
+}
+function killEnemy(e) {
+  e.alive = false; e.dieT = 0.6; e.rig.ice && (e.rig.ice.enabled = false);
+  if (e.kind === 'pylon') { play('boom'); burst(e.x, e.y + 2, e.z, 30, 'violet', 8, 0.2, 1); const b = W.boss; if (b?.shield && b.pylons.every((q) => !q.alive)) { b.shield = false; b.shieldDone = true; b.rig.shield.enabled = false; b.state = 'recover'; b.t = 0; b.rec = 2.2; toast('Le bouclier se brise ! Le Colosse chancelle.'); shake(0.8); play('open'); } return; }
+  save.kills++; play('death');
+  burst(e.x, e.y + 1, e.z, e.kind === 'boss' ? 60 : 18, e.kind === 'slime' || e.kind === 'mini' ? 'slime' : e.kind === 'boss' || e.kind === 'wisp' ? 'violet' : 'stone', e.kind === 'boss' ? 12 : 7, 0.22, 1.2);
+  const [g0, g1] = e.d.gold, gold = g0 + Math.floor(R() * (g1 - g0 + 1));
+  if (gold) { save.gold += gold; setTimeout(() => { floater(e.x, e.y + 1.5, e.z, `+${gold} or`, 'gold'); play('coin'); }, 200); burst(e.x, e.y + 1, e.z, 8, 'gold', 4, 0.12, 0.8); }
+  if (e.kind === 'slime') { toast('Le Brumelin se divise !'); [-1, 1].forEach((s) => { const m = spawnEnemy('mini', e.x + s * 1.2, e.z, e.zone); m.state = 'chase'; m.vx = s * 6; }); }
+  if (e.kind === 'boss') { save.cleared.ridge = true; $('bossBar').hidden = true; Audio.setMode('explore'); toast('Le Colosse de cristal s’effondre. La barrière se dissout !'); openZone('ridge'); writeSave(); }
+  if (e.zone && ZONES[e.zone] && e.zone !== 'ridge') {
+    const left = enemies.filter((x) => x.alive && x.zone === e.zone).length;
+    if (!left) { save.cleared[e.zone] = true; toast(save.runes[e.zone] ? 'Zone libérée : la barrière s’ouvre !' : 'Zone libérée. Il reste l’énigme de la stèle.'); if (zoneOpen(e.zone)) openZone(e.zone); writeSave(); }
+  }
+  if (R() < (e.kind === 'slime' || e.kind === 'mini' ? 0.2 : 0.45)) dropFlower(e.x, e.z);
+}
+function updateEnemies(dt) {
+  const p = player, attackers = enemies.filter(meleeBusy).length;
+  for (const e of enemies) {
+    const r = e.rig;
+    if (!e.alive) { if (e.dieT > 0) { e.dieT -= dt; const s = Math.max(0.01, e.dieT / 0.6); r.root.setLocalScale(s, s * 0.6, s); if (e.dieT <= 0) r.root.enabled = false; } continue; }
+    const dx = p.x - e.x, dz = p.z - e.z, d = Math.hypot(dx, dz) || 0.001, D = e.d;
+    if (e.kind === 'pylon') { r.body.setLocalEulerAngles(0, state.time * 30, 0); r.root.setPosition(e.x, e.y, e.z); continue; }
+    e.flash = Math.max(0, e.flash - dt); e.inv = Math.max(0, e.inv - dt); e.t += dt; e.cd -= dt; e.cd2 -= dt; e.cd3 -= dt;
+    if (e.burn > 0) { e.burn -= dt; e.burnTick -= dt; if (R() < dt * 12) burst(e.x, e.y + D.h * 0.6, e.z, 1, 'fire', 1.5, 0.1, 0.5, -1); if (e.burnTick <= 0) { e.burnTick = 0.6; damageEnemy(e, 3, 0, 0, false, 'burn'); if (!e.alive) continue; } }
+    let tvx = 0, tvz = 0, control = false;
+    if (e.frozen > 0) { e.frozen -= dt; control = true; e.vx *= 0.8; e.vz *= 0.8; if (e.frozen <= 0 && e.state === 'windup') e.state = 'chase'; }
+    else if (e.stun > 0) { e.stun -= dt; control = true; if (R() < dt * 5) burst(e.x, e.y + D.h + 0.3, e.z, 1, 'gold', 1.5, 0.1, 0.5, 0); if (e.state === 'windup') { e.state = 'chase'; } }
+    if (r.ice) r.ice.enabled = e.frozen > 0;
+    if (!control) switch (e.state) {
+      case 'dormant': if (d < 24 && !p.dead) { e.state = 'chase'; $('bossBar').hidden = false; $('bossName').textContent = D.name; Audio.setMode('boss'); showZoneTitle('Colosse de cristal', 'Gardien de la crête'); } break;
+      case 'idle': {
+        if (e.t > 2.5) { e.t = 0; const a = R() * Math.PI * 2; e.tx = e.hx + Math.cos(a) * 5; e.tz = e.hz + Math.sin(a) * 5; }
+        const ex = e.tx - e.x, ez = e.tz - e.z, l = Math.hypot(ex, ez); if (l > 0.5) { tvx = ex / l * D.speed * 0.35; tvz = ez / l * D.speed * 0.35; e.yaw = angleLerp(e.yaw, Math.atan2(tvx, tvz), clamp(4 * dt, 0, 1)); }
+        if (d < D.aggro && !p.dead) { e.state = 'chase'; floater(e.x, e.y + D.h + 0.5, e.z, '!', 'alert'); }
+        break;
+      }
+      case 'return': {
+        const hx = e.hx - e.x, hz = e.hz - e.z, l = Math.hypot(hx, hz); e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.3 * dt);
+        if (l < 1.5) { e.state = e.kind === 'boss' ? 'dormant' : 'idle'; if (e.kind === 'boss') { $('bossBar').hidden = true; Audio.setMode('explore'); } } else { tvx = hx / l * D.speed; tvz = hz / l * D.speed; e.yaw = angleLerp(e.yaw, Math.atan2(hx, hz), clamp(6 * dt, 0, 1)); }
+        break;
+      }
+      case 'shield': {                  // le Colosse protégé tire des salves d'éclats
+        e.yaw = angleLerp(e.yaw, Math.atan2(dx, dz), clamp(3 * dt, 0, 1));
+        const hx = e.hx - e.x, hz = e.hz - e.z, l = Math.hypot(hx, hz); if (l > 2) { tvx = hx / l * 2; tvz = hz / l * 2; }
+        if (e.cd2 <= 0) startWindup(e, 'volley', 0.7);
+        break;
+      }
+      case 'chase': {
+        if (p.dead || dist2(e.x, e.z, e.hx, e.hz) > (e.kind === 'boss' ? 42 : 34)) { e.state = 'return'; break; }
+        e.yaw = angleLerp(e.yaw, Math.atan2(dx, dz), clamp(8 * dt, 0, 1));
+        const ux = dx / d, uz = dz / d, orbitX = -uz * e.orbit, orbitZ = ux * e.orbit;
+        if (R() < dt * 0.25) e.orbit *= -1;
+        if (e.kind === 'wisp') {
+          if (d < 5.5 && e.cd3 <= 0) { blink(e); break; }
+          if (e.cd <= 0 && d < 20) { startWindup(e, 'cast', D.wind); break; }
+          if (e.cd2 <= 0 && d < 16) { startWindup(e, 'root', 0.35); break; }
+          const radial = clamp((d - 11) * 0.5, -1, 1); tvx = (ux * radial + orbitX * 0.8) * D.speed; tvz = (uz * radial + orbitZ * 0.8) * D.speed;
+        } else if (e.kind === 'boss') {
+          if (d > 9 && e.cd2 <= 0) startWindup(e, 'volley', 0.7);
+          else if (d < D.range + 0.5 && e.cd <= 0) startWindup(e, 'slam', e.enraged ? 0.75 : D.wind);
+          else if (d > D.range * 0.7) { tvx = ux * D.speed; tvz = uz * D.speed; }
+        } else {
+          const tok = attackers < 2;
+          if (e.kind === 'golem' && d > 7 && d < 15 && e.cd2 <= 0 && tok) startWindup(e, 'charge', 0.6);
+          else if (e.kind === 'golem' && d < 4.2 && e.cd3 <= 0 && R() < 0.4 && tok) startWindup(e, 'stomp', 0.85);
+          else if (e.kind === 'slime' && d > 5 && d < 11 && e.cd2 <= 0 && R() < dt * 2) startWindup(e, 'spit', 0.4);
+          else if (d < D.range && e.cd <= 0 && tok) startWindup(e, 'melee', D.wind);
+          else if (d < 6.5 && (!tok || e.cd > 0)) { const radial = clamp((d - 4.6) * 0.8, -1, 1); tvx = (ux * radial + orbitX) * D.speed * 0.75; tvz = (uz * radial + orbitZ) * D.speed * 0.75; }
+          else { tvx = (ux + orbitX * 0.25) * D.speed; tvz = (uz + orbitZ * 0.25) * D.speed; }
+        }
+        break;
+      }
+      case 'windup':
+        if (e.kind !== 'golem' || e.atk !== 'charge') e.yaw = angleLerp(e.yaw, Math.atan2(dx, dz), clamp((e.kind === 'boss' ? 3 : 6) * dt, 0, 1));
+        if (e.kind === 'boss' && e.atk === 'slam' && R() < dt * 30) burst(e.slamX, groundAt(e.slamX, e.slamZ) + 0.1, e.slamZ, 1, 'red', 4, 0.2, 0.4, 2);
+        if (e.t >= e.wind) finishWindup(e, d);
+        break;
+      case 'strike':
+        if (!e.hitDone && d < 1.4 + D.radius * 0.5) { hurtPlayer(D.dmg, e.x, e.z); e.hitDone = true; }
+        if (e.t > 0.45) { e.state = 'chase'; e.cd = 1.1 + R(); }
+        break;
+      case 'charge': {
+        tvx = e.cdx * 15; tvz = e.cdz * 15; e.yaw = Math.atan2(e.cdx, e.cdz); if (R() < dt * 20) burst(e.x, e.y + 0.2, e.z, 1, 'stone', 3, 0.15, 0.5);
+        if (!e.hitDone && d < 1.9) { e.hitDone = true; hurtPlayer(18, e.x, e.z); }
+        if (e.t > 1.1 || e.hitDone || e.bumped) { e.state = 'recover'; e.t = 0; e.rec = 1.0; e.cd2 = 7 + R() * 2; e.bumped = false; if (!e.hitDone) floater(e.x, e.y + D.h + 0.4, e.z, 'Étourdi', ''); }
+        break;
+      }
+      case 'recover': if (e.t > (e.rec || 0.6)) e.state = 'chase'; break;
+      case 'dodge': if (e.t > 0.3) e.state = 'chase'; break;
+      case 'block': e.yaw = angleLerp(e.yaw, Math.atan2(dx, dz), clamp(10 * dt, 0, 1)); if (e.t > 0.8) { e.state = 'chase'; e.cd = Math.min(e.cd, 0.2); } break;
+    }
+    const k = e.state === 'dodge' || e.state === 'strike' ? 0.02 : e.state === 'charge' ? 0.3 : clamp(8 * dt, 0, 1);
+    e.vx = lerp(e.vx, tvx, k); e.vz = lerp(e.vz, tvz, k);
+    let nx = e.x + e.vx * dt, nz = e.z + e.vz * dt;
+    for (const c of nearColliders(nx, nz)) { if (!c.on) continue; const cx = nx - c.x, cz = nz - c.z, cd = Math.hypot(cx, cz), m = c.r + D.radius * 0.8; if (cd < m && cd > 0.0001) { nx = c.x + cx / cd * m; nz = c.z + cz / cd * m; if (e.state === 'charge') e.bumped = true; } }
+    for (const o of enemies) { if (o === e || !o.alive) continue; const cx = nx - o.x, cz = nz - o.z, cd = Math.hypot(cx, cz), m = (D.radius + o.d.radius) * 0.8; if (cd < m && cd > 0.0001) { nx += cx / cd * (m - cd) * 0.5; nz += cz / cd * (m - cd) * 0.5; } }
+    if (terrainH(nx, nz) > 0.2) { e.x = nx; e.z = nz; } else { e.vx = 0; e.vz = 0; if (e.state === 'charge') e.bumped = true; }
+    e.y = groundAt(e.x, e.z);
+    animateEnemy(e, dt, d);
+  }
+  const boss = W.boss; if (boss && boss.alive && boss.state !== 'dormant') $('bossHp').style.transform = `scaleX(${clamp(boss.hp / boss.maxHp, 0, 1)})`;
+}
+function animateEnemy(e, dt, d) {
+  const r = e.rig, t = state.time + e.hx, frozen = e.frozen > 0;
+  r.root.setPosition(e.x, e.y, e.z); r.root.setEulerAngles(0, e.yaw * 180 / Math.PI, 0);
+  if (frozen) return;
+  if (e.kind === 'slime' || e.kind === 'mini') {
+    let sy = 1 + Math.sin(t * 6) * 0.08, sxz = 1 - Math.sin(t * 6) * 0.05, y = Math.max(0, Math.sin(t * 6)) * 0.25;
+    if (e.state === 'windup') { const k = e.t / e.wind; sy = 1 - k * 0.35; sxz = 1 + k * 0.25; y = 0; }
+    if (e.state === 'strike') { sy = 1.25; sxz = 0.85; y = 0.6; }
+    if (e.state === 'dodge') { sy = 0.8; sxz = 1.2; y = 0.3; }
+    const s = e.kind === 'mini' ? 0.6 : 1; r.body.setLocalScale(sxz * s, sy * s, sxz * s); r.body.setLocalPosition(0, y, 0);
+    if (e.flash > 0) setGlow(r.mat, 'flash', '#FFFFFF', 2); else if (e.state === 'windup') setGlow(r.mat, e.atk === 'spit' ? 'spit' : 'wind', e.atk === 'spit' ? '#9BFF4A' : '#E65A33', 0.9); else setGlow(r.mat, 'idle', '#1E7F6C', 0.5);
+  } else if (e.kind === 'wisp') {
+    const y = 0.5 + Math.sin(t * 2.2) * 0.25; r.body.setLocalPosition(0, y, 0);
+    const cast = e.state === 'windup'; r.parts.armL.setLocalEulerAngles(cast ? -150 : Math.sin(t * 2) * 15, 0, 15); r.parts.armR.setLocalEulerAngles(cast ? -150 : -Math.sin(t * 2) * 15, 0, -15);
+    r.parts.orb.setLocalPosition(Math.sin(t * 3) * 0.9, 1.6 + Math.sin(t * 5) * 0.2, Math.cos(t * 3) * 0.9);
+    if (e.flash > 0) setGlow(r.eyeMat, 'flash', '#FFFFFF', 5); else if (cast) setGlow(r.eyeMat, 'hot', '#FF5AE0', 6); else setGlow(r.eyeMat, 'idle', '#B07CFF', 4);
+  } else {
+    const sp = Math.hypot(e.vx, e.vz), sw = Math.sin(t * 5) * clamp(sp / 3, 0, 1);
+    let aL = sw * 25, aR = -sw * 25, lean = 0, crouch = 0;
+    if (e.state === 'windup') { const k = e.t / e.wind; if (e.atk === 'charge') { lean = 25 * k; aL = aR = 40; crouch = -0.15 * k; } else if (e.atk === 'stomp') { aL = aR = -60 * k; crouch = 0.3 * k; } else { aL = aR = -k * 150; lean = -k * 12; } }
+    if (e.state === 'recover' && e.t < 0.15) { const k = clamp(e.t / 0.15, 0, 1); aL = aR = lerp(-150, 30, k); lean = lerp(-12, 18, k); }
+    if (e.state === 'charge') { lean = 28; aL = aR = 50; }
+    if (e.state === 'block') { aL = -95; aR = -95; lean = -6; }
+    r.parts.armL.setLocalEulerAngles(aL, 0, e.state === 'block' ? 25 : 0); r.parts.armR.setLocalEulerAngles(aR, 0, e.state === 'block' ? -25 : 0);
+    r.body.setLocalEulerAngles(lean, 0, Math.sin(t * 2.5) * 2 * clamp(sp, 0, 1)); r.body.setLocalPosition(0, crouch, 0);
+    const hot = e.state === 'windup'; if (e.flash > 0) setGlow(r.eyeMat, 'flash', '#FFFFFF', 5); else if (hot) setGlow(r.eyeMat, 'hot', '#FF4A3A', 5); else setGlow(r.eyeMat, 'idle', e.kind === 'boss' ? '#D9B8FF' : '#7FE3FF', 3);
+    if (e.kind === 'boss' && r.shield.enabled) r.shield.setLocalEulerAngles(0, t * 40, 0);
+  }
+}
+
+/* =====================================================================
+   Trésors : coffres, or, boutique, inventaire
+   ===================================================================== */
+const chests = [];
+function buildChests() {
+  for (const c of CHESTS) {
+    const [x, z] = findLand(c.x, c.z, 2.2), y = groundAt(x, z), root = new pc.Entity('coffre');
+    root.setPosition(x, y, z); root.setEulerAngles(0, R() * 360, 0); world.addChild(root);
+    const wood = c.rare ? mat('chestGold', { diffuse: '#B8862F', gloss: 0.72, metal: 0.65 }) : mat('chestWood', { diffuse: '#7A4E26', gloss: 0.3 }), band = mat('chestBand', { diffuse: '#D9B45A', gloss: 0.85, metal: 0.9 });
+    prim('box', wood, root, [0, 0.35, 0], [1.2, 0.7, 0.8]); prim('box', band, root, [0, 0.35, 0], [1.24, 0.12, 0.84]);
+    prim('box', band, root, [-0.45, 0.35, 0], [0.1, 0.72, 0.84]); prim('box', band, root, [0.45, 0.35, 0], [0.1, 0.72, 0.84]);
+    const lid = new pc.Entity('couvercle'); lid.setLocalPosition(0, 0.7, -0.4); root.addChild(lid);
+    prim('box', wood, lid, [0, 0.12, 0.4], [1.2, 0.24, 0.8]); prim('box', band, lid, [0, 0.12, 0.81], [0.22, 0.2, 0.05]);
+    let light = null;
+    if (c.rare) { light = new pc.Entity('lueur'); light.addComponent('light', { type: 'omni', color: new pc.Color(1, 0.78, 0.4), intensity: 1.3, range: 6, castShadows: false }); light.setLocalPosition(0, 1.3, 0); root.addChild(light); }
+    addCollider(x, z, 0.8, 'chest');
+    const ch = { ...c, x, z, root, lid, light, open: false, lidT: 0 }; chests.push(ch);
+    interactables.push({ id: 'chest:' + c.id, x, z, r: 2.4, label: () => c.rare ? 'Ouvrir le coffre ancien' : 'Ouvrir le coffre', act: () => openChest(ch), enabled: () => !ch.open });
+  }
+}
+function openChest(ch) {
+  if (ch.open) return;
+  const guards = enemies.filter((e) => e.alive && e.zone === 'guard' && dist2(e.x, e.z, ch.x, ch.z) < 12);
+  if (guards.length) { toast('Des gardiens protègent ce coffre : élimine-les d’abord.'); play('wrong'); return; }
+  ch.open = true; if (!save.chests.includes(ch.id)) save.chests.push(ch.id); play('chest'); shake(0.15);
+  burst(ch.x, groundAt(ch.x, ch.z) + 1, ch.z, 30, 'gold', 5, 0.16, 1.2, 4); if (ch.light) ch.light.enabled = false;
+  const L = ch.loot, lines = [];
+  if (L.gold) { save.gold += L.gold; lines.push(`🪙 ${L.gold} pièces d’or`); }
+  if (L.arrows) { save.arrows += L.arrows; lines.push(`🏹 ${L.arrows} flèches`); }
+  if (L.hp) { save.potions.hp += L.hp; lines.push('🧪 Potion de vie'); }
+  if (L.mp) { save.potions.mp += L.mp; lines.push('💧 Potion de mana'); }
+  if (L.item) { save.items[L.item] = true; const it = ITEMS[L.item]; lines.unshift(`<b>${it.icon} ${it.name}</b><small>${it.desc}</small>`); if (L.item === 'amulet') player.mp = stats().maxMp; hud.weapons = null; }
+  showLoot(ch.rare ? 'Trésor ancien !' : 'Trésor !', lines); writeSave();
+}
+let lootTimer = null;
+function showLoot(title, lines) { const el = $('loot'); el.innerHTML = `<h3>${title}</h3>${lines.map((l) => `<p>${l}</p>`).join('')}`; el.hidden = false; clearTimeout(lootTimer); lootTimer = setTimeout(() => { el.hidden = true; }, 4200); }
+function shopLines() {
+  const offers = SHOP.filter((o) => (!o.need || o.need()) && !(o.once && save.upgrades[o.id]));
+  return [{ who: 'Ilyas', text: `Que puis-je faire pour toi ? Tu as ${save.gold} pièces d’or.`, choices: [
+    ...offers.map((o) => ({ label: `${o.label} — ${o.price} or${o.desc ? ` (${o.desc})` : ''}`, act: () => {
+      if (save.gold < o.price) return [{ who: 'Ilyas', text: 'Il te manque quelques pièces… Les coffres de l’île en regorgent, paraît-il.' }];
+      save.gold -= o.price; o.buy(); play('buy'); writeSave(); hud.purse = null;
+      return [{ who: 'Ilyas', text: `Voilà pour toi : ${o.label.toLowerCase()}. Il te reste ${save.gold} pièces.` }];
+    } })),
+    { label: 'Rien, merci.', next: [] },
+  ] }];
+}
+function renderInventory() {
+  const st = stats(), own = Object.keys(ITEMS).filter((k) => save.items[k]);
+  $('invBody').innerHTML = `<div class="inv-stats"><span>❤ ${Math.ceil(player.hp)} / ${player.maxHp}</span><span>✦ ${Math.round(player.mp)} / ${st.maxMp} mana</span><span>🪙 ${save.gold} or</span><span>🏹 ${save.arrows} flèches</span><span>🧪 ${save.potions.hp} vie · 💧 ${save.potions.mp} mana</span><span>⚔ dégâts ×${st.dmg.toFixed(2)}</span><span>🛡 dégâts subis ×${st.def.toFixed(2)}</span></div>
+    <h3>Armes</h3><div class="inv-grid">${WEAPONS.map((w) => `<div class="inv-item ${save.items[w.id] ? '' : 'locked'}"><b>${w.icon} ${w.name}</b><small>${save.items[w.id] ? w.desc : 'Pas encore trouvé.'}</small><kbd>${w.key}</kbd></div>`).join('')}</div>
+    <h3>Objets</h3><div class="inv-grid">${own.filter((k) => !WEAPONS.some((w) => w.id === k)).map((k) => `<div class="inv-item"><b>${ITEMS[k].icon} ${ITEMS[k].name}</b><small>${ITEMS[k].desc}</small></div>`).join('') || '<p class="hint">Aucun objet pour l’instant : explore l’île à la recherche de coffres.</p>'}</div>
+    <p class="hint">Coffres ouverts : ${save.chests.length} / ${CHESTS.length} · Pierres de cœur : ${save.hearts.length} / 4${save.upgrades.blade ? ' · Épée affûtée' : ''}${save.upgrades.armor ? ' · Armure renforcée' : ''}</p>`;
+}
+const ebarPool = [];
+function updateEnemyBars() {
+  const host = $('ebars'); let n = 0;
+  for (const e of enemies) {
+    if (!e.alive || e.state === 'dormant' || e.kind === 'boss' || (e.hp >= e.maxHp && e.state === 'idle')) continue;
+    if (dist2(e.x, e.z, player.x, player.z) > 26) continue;
+    const v = camera.camera.worldToScreen(new pc.Vec3(e.x, e.y + e.d.h + 0.6, e.z)); if (v.z < 0) continue;
+    let el = ebarPool[n]; if (!el) { el = document.createElement('div'); el.className = 'ebar'; el.innerHTML = '<i></i><span></span>'; host.append(el); ebarPool.push(el); }
+    el.hidden = false; el.style.transform = `translate(${Math.round(v.x - 28)}px, ${Math.round(v.y)}px)`; el.firstChild.style.width = `${Math.max(0, e.hp / e.maxHp * 100)}%`;
+    el.lastChild.textContent = e.frozen > 0 ? '❄' : e.stun > 0 ? '✶' : e.burn > 0 ? '🔥' : e.state === 'block' ? '🛡' : '';
+    n++;
+  }
+  for (let i = n; i < ebarPool.length; i++) ebarPool[i].hidden = true;
+}
+
+const enemies = [];
+function clearEnemies() { for (const e of enemies) e.rig.root.destroy(); enemies.length = 0; }
 
 /* ---------- PNJ : Ilyas ---------- */
 let ilyas;
@@ -622,6 +1234,7 @@ function buildInteractables() {
     o.shard = shard; o.barrier = barrier; o.barrierCol = bc;
     interactables.push({ id: 'shard:' + Z.key, x: p.x, z: p.z, r: 3.4, label: () => `Prendre l’${Z.shardName}`, act: () => takeShard(Z), enabled: () => !save.shards[Z.key] && zoneOpen(Z.key) });
   }
+  buildChests();
   // Pierres de cœur (exploration)
   [['h1', -176, -40], ['h2', 172, 36], ['h3', -66, -168], ['h4', 70, 120]].forEach(([id, x, z]) => {
     const [px, pz] = findLand(x, z, 2.6), y = groundAt(px, pz);
@@ -681,15 +1294,18 @@ addEventListener('keydown', (e) => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'Tab'].includes(e.code)) e.preventDefault();
   if (e.code === 'Escape' || e.code === 'KeyP') onPauseKey();
   if (e.code === 'KeyM' && ['playing', 'map'].includes(state.mode)) toggleMap();
+  if ((e.code === 'KeyI' || e.code === 'Tab') && ['playing', 'inventory'].includes(state.mode)) toggleInventory();
+  if (e.code === 'KeyJ') held.attack = true;
 });
-addEventListener('keyup', (e) => keys.delete(e.code));
+addEventListener('keyup', (e) => { keys.delete(e.code); if (e.code === 'KeyJ') { held.attack = false; pressed.add('AttackUp'); } });
+addEventListener('mouseup', (e) => { if (e.button === 0 && held.attack) { held.attack = false; pressed.add('AttackUp'); } });
 addEventListener('blur', () => keys.clear());
 const locked = () => document.pointerLockElement === canvas;
 canvas.addEventListener('mousedown', (e) => {
   Audio.init();
   if (state.mode !== 'playing') return;
   if (!locked() && !isTouch && canvas.requestPointerLock) { const r = canvas.requestPointerLock(); r?.catch?.(() => {}); return; }   // 1er clic : capture seulement
-  if (e.button === 0) pressed.add('Attack'); if (e.button === 2) pressed.add('Dodge');
+  if (e.button === 0) { pressed.add('Attack'); held.attack = true; } if (e.button === 2) pressed.add('Dodge');
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('mousemove', (e) => { if (locked() || (e.buttons & 4)) { input.lookX += e.movementX; input.lookY += e.movementY; } });
@@ -710,12 +1326,16 @@ if (isTouch) document.body.classList.add('has-touch');
   }, { passive: true });
   addEventListener('touchend', (e) => { for (const t of e.changedTouches) { if (t.identifier === sid) { sid = null; input.touchMove = [0, 0]; knob.style.transform = ''; } if (t.identifier === lid) lid = null; } });
   canvas.addEventListener('touchstart', (e) => { const t = e.changedTouches[0]; if (t.clientX > innerWidth * 0.4) { lid = t.identifier; lx = t.clientX; ly = t.clientY; } Audio.init(); }, { passive: true });
-  document.querySelectorAll('[data-touch]').forEach((b) => b.addEventListener('touchstart', (e) => { e.preventDefault(); Audio.init(); pressed.add({ attack: 'Attack', jump: 'Space', dodge: 'Dodge', interact: 'KeyE' }[b.dataset.touch]); }, { passive: false }));
+  document.querySelectorAll('[data-touch]').forEach((b) => b.addEventListener('touchstart', (e) => { e.preventDefault(); Audio.init(); const k = { attack: 'Attack', jump: 'Space', dodge: 'Dodge', interact: 'KeyE', power: 'KeyF', weapon: 'NextWeapon', potion: 'KeyR' }[b.dataset.touch]; pressed.add(k); if (k === 'Attack') held.attack = true; }, { passive: false }));
+  document.querySelectorAll('[data-touch="attack"]').forEach((b) => b.addEventListener('touchend', () => { held.attack = false; pressed.add('AttackUp'); }));
 })();
 function pollGamepad() {
   const gp = [...(navigator.getGamepads?.() || [])].find(Boolean); input.gp = gp || null; if (!gp) return;
   const b = (i) => gp.buttons[i]?.pressed, edge = (i, code) => { if (b(i) && !input.gpPrev[i]) pressed.add(code); input.gpPrev[i] = b(i); };
+  const wasAtk = !!input.gpPrev[2];
   edge(0, 'Space'); edge(2, 'Attack'); edge(1, 'Dodge'); edge(3, 'KeyE'); edge(5, 'KeyE'); edge(9, 'Escape'); edge(8, 'KeyM');
+  edge(7, 'KeyF'); edge(14, 'PrevWeapon'); edge(15, 'NextWeapon'); edge(12, 'KeyR'); edge(13, 'KeyT');
+  if (b(2)) held.attack = true; else if (wasAtk) { held.attack = false; pressed.add('AttackUp'); }
   if (pressed.has('Escape')) { pressed.delete('Escape'); onPauseKey(); }
   if (pressed.has('KeyM') && ['playing', 'map'].includes(state.mode)) { pressed.delete('KeyM'); toggleMap(); }
   const dz = (v) => (Math.abs(v) < 0.15 ? 0 : v);
@@ -747,24 +1367,26 @@ function update(dtRaw) {
     let gdt = dt;
     if (hitStop > 0) { hitStop -= dt; gdt = dt * 0.08; }
     const skip = window.aube?.skip || {};
-    if (state.mode === 'playing') { state.play += dt; save.play = state.play; if (!skip.player) updatePlayer(gdt); if (!skip.enemies) updateEnemies(gdt); if (!skip.pickups) updatePickups(gdt); if (!skip.interact) updateInteract(); if (!skip.zones) checkZones(); }
+    if (state.mode === 'playing') { state.play += dt; save.play = state.play; if (!skip.player) updatePlayer(gdt); if (!skip.enemies) { updateEnemies(gdt); updateProjectiles(gdt); updateFx(gdt); } if (!skip.pickups) updatePickups(gdt); if (!skip.interact) updateInteract(); if (!skip.zones) checkZones(); }
     else if (state.mode === 'dialogue') { updateEnemies(0); animatePlayer(dt, 0); updateDialogue(dt); }
     else updateCinematic(dt);
     if (!skip.camera) updateCamera(dt);
   } else if (state.mode === 'dead') updateCamera(dt);
   if (!window.aube?.skip?.particles) updateParticles(dt);
-  if (state.mode !== 'title' && state.mode !== 'loading' && !window.aube?.skip?.hud) { hudT -= dt; if (hudT <= 0) { hudT = 0.2; if (!window.aube?.noMinimap) drawMinimap(); } updateHud(); }
+  if (state.mode !== 'title' && state.mode !== 'loading' && !window.aube?.skip?.hud) { hudT -= dt; if (hudT <= 0) { hudT = 0.2; if (!window.aube?.noMinimap) drawMinimap(); } if (state.mode === 'playing') updateEnemyBars(); updateHud(); }
   input.lookX = 0; input.lookY = 0; pressed.clear();
   if (settings.showFps) { fpsAcc += dtRaw; fpsN++; if (fpsAcc > 0.5) { $('fps').textContent = `${Math.round(fpsN / fpsAcc)} i/s · ${device.isWebGPU ? 'WebGPU' : 'WebGL 2'}`; fpsAcc = 0; fpsN = 0; } }
 }
 function animateWorld(dt) {
   const t = state.time;
-  if (W.water) W.water.setLocalPosition(0, SEA + Math.sin(t * 0.6) * 0.08, 0);
+  if (W.water) W.water.setLocalPosition((t * 0.35) % 10, SEA + Math.sin(t * 0.6) * 0.08, (t * 0.22) % 10);   // les vagues défilent
+  if (W.clouds) W.clouds.setLocalEulerAngles(0, t * 0.25, 0);
   if (camera) { const cp = camera.getPosition(); W.sky.setPosition(cp.x, 0, cp.z); const sd = sun.forward; W.sunDisc.setPosition(cp.x - sd.x * 800, -sd.y * 800 - 60, cp.z - sd.z * 800); }
   if (W.fire) { const f = 1 + Math.sin(t * 13) * 0.08 + Math.sin(t * 7.3) * 0.06; W.fire.flames.forEach((e, i) => e.setLocalScale(0.9 * f / (i + 1) ** 0.5, 1.2 * (2 - f) / (i + 1) ** 0.4, 0.9 * f / (i + 1) ** 0.5)); W.fire.light.light.intensity = 2 + Math.sin(t * 17) * 0.3; if (R() < dt * 6) burst(PLACES.camp.x, heightAt(PLACES.camp.x, PLACES.camp.z) + 1, PLACES.camp.z, 1, 'fire', 1.5, 0.08, 1.2, -1); }
   for (const k in totems) { const tt = totems[k]; if (tt.lit && tt.flame) { const f = 1 + Math.sin(t * 11 + k.length) * 0.1; tt.flame.setLocalScale(0.7 * f, 1 * (2 - f), 0.7 * f); } }
   for (const Z of Object.values(ZONES)) { const o = zoneObjs[Z.key]; if (o.shard?.enabled) { o.shard.setLocalEulerAngles(0, t * 60, 0); const p = o.pedestal; o.shard.setPosition(p.x, groundAt(p.x, p.z) + 2.6 + Math.sin(t * 2) * 0.2, p.z); } if (o.barrier?.enabled) o.barrier.setLocalEulerAngles(0, t * 20, 0); }
   for (const p of pickups) if (!p.taken) { p.e.setLocalEulerAngles(0, t * (p.kind === 'heart' ? 90 : 30), 0); }
+  for (const c of chests) if (c.open && c.lidT < 1) { c.lidT = Math.min(1, c.lidT + dt * 2); c.lid.setLocalEulerAngles(-110 * (1 - (1 - c.lidT) ** 3), 0, 0); }
   if (altar?.beam.enabled) { const s = altar.beamGrow ?? 1; altar.beam.setLocalScale(3 + Math.sin(t * 3) * 0.3, 100 * s, 3 + Math.sin(t * 3) * 0.3); altar.beam.setLocalPosition(0, 13 + 50 * s, 0); }
 }
 function attractCamera(dt) {
@@ -779,32 +1401,38 @@ function updatePlayer(dt) {
   if (p.dead) return;
   const sens = 0.0026 * settings.sensitivity;
   cam.yaw -= input.lookX * sens; cam.pitch = clamp(cam.pitch + input.lookY * sens * (settings.invertY ? -1 : 1), -0.35, 1.15);
-  const [ax, az] = moveAxis(), moving = Math.hypot(ax, az) > 0.05;
+  const st = stats();
+  for (const k in p.powerCd) p.powerCd[k] = Math.max(0, p.powerCd[k] - dt);
+  p.primCd = Math.max(0, p.primCd - dt); p.cast = Math.max(0, p.cast - dt); p.spin = Math.max(0, p.spin - dt); p.slow = Math.max(0, p.slow - dt); p.rooted = Math.max(0, p.rooted - dt);
+  p.mp = Math.min(st.maxMp, p.mp + 4 * dt);
+  if (p.hot > 0) { const h = Math.min(p.hot, dt * 11); p.hot -= h; p.hp = Math.min(p.maxHp, p.hp + h); if (R() < dt * 8) burst(p.x, p.y + 1, p.z, 1, 'gold', 1.5, 0.1, 0.8, -2); }
+  for (const [code, id] of [['Digit1', 'sword'], ['Digit2', 'bow'], ['Digit3', 'staff'], ['Digit4', 'flute']]) if (take(code)) selectWeapon(id);
+  if (take('NextWeapon')) cycleWeapon(1); if (take('PrevWeapon')) cycleWeapon(-1);
+  if (take('KeyR')) usePotion('hp'); if (take('KeyT')) usePotion('mp');
+  const [ax, az] = moveAxis(), moving = Math.hypot(ax, az) > 0.05 && p.rooted <= 0;
   const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
   let wx = rx * ax - fx * az, wz = rz * ax - fz * az;
-  const run = running() && moving && p.st > 1 && p.attack <= 0;
-  const speed = p.dodge > 0 ? 0 : (p.attack > 0 ? 1.6 : run ? 9.2 : 5.4);
-  if (run) p.st = Math.max(0, p.st - 22 * dt); else if (p.dodge <= 0 && p.attack <= 0) p.st = Math.min(100, p.st + (moving ? 16 : 26) * dt);
-  // attaque
+  const busy = p.attack > 0 || p.cast > 0 || p.charging || p.spin > 0;
+  const run = running() && moving && p.st > 1 && !busy;
+  let speed = p.dodge > 0 ? 0 : (busy ? (p.charging ? 2.6 : 1.6) : run ? 9.2 : 5.4);
+  speed *= st.speed * (p.slow > 0 ? 0.55 : 1); if (p.rooted > 0) speed = 0;
+  if (run) p.st = Math.max(0, p.st - 22 * dt); else if (p.dodge <= 0 && !busy) p.st = Math.min(100, p.st + (moving ? 16 : 26) * dt);
+  // armes
   p.comboWindow -= dt;
-  if (take('Attack') || take('KeyJ')) {
-    if (p.attack <= 0.12 && p.dodge <= 0 && p.st >= 8) {
-      p.combo = p.comboWindow > 0 ? (p.combo % 3) + 1 : 1; p.attack = p.combo === 3 ? 0.5 : 0.36; p.attackHit = false; p.comboWindow = p.attack + 0.35; p.st -= 8; play('swing');
-      const tgt = nearestEnemy(4.5); if (tgt) p.yaw = Math.atan2(tgt.x - p.x, tgt.z - p.z); else if (moving) p.yaw = Math.atan2(wx, wz);
-    }
-  }
+  weaponActions(dt, moving, wx, wz);
   if (p.attack > 0) { p.attack -= dt; const total = p.combo === 3 ? 0.5 : 0.36; if (!p.attackHit && p.attack < total * 0.55) { p.attackHit = true; strike(); } }
   // esquive
-  if ((take('Dodge') || take('KeyK') || take('ControlLeft')) && p.dodge <= 0 && p.st >= 20 && p.grounded) {
-    p.dodge = 0.45; p.invuln = 0.4; p.st -= 20; play('dodge'); p.attack = 0;
+  if ((take('Dodge') || take('KeyK') || take('ControlLeft')) && p.dodge <= 0 && p.st >= 20 && p.grounded && p.rooted <= 0) {
+    p.dodge = 0.45; p.invuln = 0.4; p.st -= 20; play('dodge'); p.attack = 0; p.charging = false;
     const dx = moving ? wx : Math.sin(p.yaw), dz2 = moving ? wz : Math.cos(p.yaw), l = Math.hypot(dx, dz2) || 1; p.dvx = dx / l * 13; p.dvz = dz2 / l * 13; p.yaw = Math.atan2(p.dvx, p.dvz);
   }
   let tvx = wx * speed, tvz = wz * speed;
   if (p.dodge > 0) { p.dodge -= dt; tvx = p.dvx * (p.dodge / 0.45 + 0.2); tvz = p.dvz * (p.dodge / 0.45 + 0.2); }
   const acc = p.grounded ? 14 : 4; p.vx = lerp(p.vx, tvx, clamp(acc * dt, 0, 1)); p.vz = lerp(p.vz, tvz, clamp(acc * dt, 0, 1));
-  if (moving && p.attack <= 0 && p.dodge <= 0) p.yaw = angleLerp(p.yaw, Math.atan2(wx, wz), clamp(12 * dt, 0, 1));
+  if (moving && !busy && p.dodge <= 0) p.yaw = angleLerp(p.yaw, Math.atan2(wx, wz), clamp(12 * dt, 0, 1));
+  if (p.charging) { const { dir } = aimDir(); p.yaw = angleLerp(p.yaw, Math.atan2(dir.x, dir.z), clamp(14 * dt, 0, 1)); }
   // saut et gravité
-  if (take('Space') && p.grounded && p.dodge <= 0) { p.vy = 8.6; p.grounded = false; play('jump'); }
+  if (take('Space') && p.grounded && p.dodge <= 0 && p.rooted <= 0) { p.vy = 8.6; p.grounded = false; play('jump'); }
   p.vy -= 24 * dt;
   let nx = p.x + p.vx * dt, nz = p.z + p.vz * dt;
   // collisions (cercles) + bords de l'île
@@ -834,6 +1462,11 @@ function animatePlayer(dt, sp) {
     else { aR = lerp(-160, 20, clamp(e, 0, 1)); aRz = -20; bodyY = lerp(20, -25, clamp(e, 0, 1)); }
     setOpacity(P.trail.render.material, t > 0.3 && t < 0.85 ? 0.45 : 0);
   } else setOpacity(P.trail.render.material, 0);
+  if (p.charging) { aL = -88; aR = -80; bodyY = -12; }
+  else if (p.cast > 0 && p.weapon === 'staff') { aR = -120; aRz = 10; }
+  else if (p.cast > 0 && p.weapon === 'flute') { aR = -125; aRz = 35; aL = -110; }
+  else if (p.cast > 0 && p.weapon === 'bow') { aL = -88; aR = -40; }
+  if (p.spin > 0) { bodyY = (1 - p.spin / 0.45) * 360; aR = -90; aRz = 60; }
   if (p.dodge > 0) { bodyX = (1 - p.dodge / 0.45) * 360; }
   if (!p.grounded) { aL = -30; aR = p.attack > 0 ? aR : -150; P.legL.setLocalEulerAngles(-30, 0, 0); P.legR.setLocalEulerAngles(20, 0, 0); }
   P.armR.setLocalEulerAngles(aR, 0, aRz); P.armL.setLocalEulerAngles(aL, 0, 8);
@@ -844,19 +1477,21 @@ function animatePlayer(dt, sp) {
 }
 function nearestEnemy(range) { let best = null, bd = range; for (const e of enemies) { if (!e.alive || e.state === 'dormant') continue; const d = dist2(e.x, e.z, player.x, player.z); if (d < bd) { bd = d; best = e; } } return best; }
 function strike() {
-  const p = player, dmgBase = p.combo === 3 ? 22 : 12, reach = p.combo === 3 ? 3.4 : 2.9, arc = p.combo === 2 ? 2.4 : 1.4;
+  const p = player, dmgBase = (p.combo === 3 ? 22 : 12) * stats().dmg, reach = p.combo === 3 ? 3.4 : 2.9, arc = p.combo === 2 ? 2.4 : 1.4;
   let hit = false;
   for (const e of enemies) {
     if (!e.alive || e.state === 'dormant') continue;
     const dx = e.x - p.x, dz = e.z - p.z, d = Math.hypot(dx, dz) - e.d.radius * 0.6;
     const ang = Math.abs(((Math.atan2(dx, dz) - p.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
-    if (d < reach && ang < arc) { const crit = R() < 0.12, dmg = Math.round(dmgBase * (crit ? 1.8 : 1) * (0.9 + R() * 0.2)); damageEnemy(e, dmg, dx / (Math.hypot(dx, dz) || 1), dz / (Math.hypot(dx, dz) || 1), crit); hit = true; }
+    if (d < reach && ang < arc) { const crit = R() < 0.12, dmg = Math.round(dmgBase * (crit ? 1.8 : 1) * (0.9 + R() * 0.2)); damageEnemy(e, dmg, dx / (Math.hypot(dx, dz) || 1), dz / (Math.hypot(dx, dz) || 1), crit, 'melee'); hit = true; }
   }
   if (hit) { hitStop = 0.06; shake(0.25); play('hit'); }
 }
 function shake(a) { if (settings.shake) cam.shake = Math.max(cam.shake, a); }
-function hurtPlayer(dmg, fromX, fromZ) {
+function hurtPlayer(dmg, fromX, fromZ, fx = {}) {
   const p = player; if (p.invuln > 0 || p.dead || state.mode !== 'playing') return;
+  dmg = Math.max(1, Math.round(dmg * stats().def)); p.charging = false;
+  if (fx.slow) { p.slow = fx.slow; toast('Acide : tu es ralentie.'); } if (fx.root) { p.rooted = fx.root; toast('Des racines t’immobilisent !'); }
   p.hp = Math.max(0, p.hp - dmg); p.invuln = 0.7; p.hurtFlash = 0.5; play('hurt'); shake(0.5);
   const dx = p.x - fromX, dz = p.z - fromZ, l = Math.hypot(dx, dz) || 1; p.vx += dx / l * 9; p.vz += dz / l * 9; p.vy = 4; p.grounded = false;
   $('dmgFlash').style.opacity = 1; setTimeout(() => { $('dmgFlash').style.opacity = 0; }, 160);
@@ -865,89 +1500,7 @@ function hurtPlayer(dmg, fromX, fromZ) {
 }
 
 /* ---------- Ennemis ---------- */
-function damageEnemy(e, dmg, nx, nz, crit) {
-  e.hp -= dmg; e.flash = 0.15; play('enemyHit'); e.hitsTaken++;
-  floater(e.x, e.y + (e.kind === 'boss' ? 7 : e.kind === 'golem' ? 3.2 : 1.8), e.z, crit ? `${dmg} !` : `${dmg}`, crit ? 'crit' : '');
-  burst(e.x, e.y + 1.2, e.z, 6, e.kind === 'slime' ? 'slime' : e.kind === 'boss' ? 'violet' : 'stone', 6, 0.16, 0.6);
-  if (e.kind !== 'boss' || e.hitsTaken % 4 === 0) { e.vx += nx * (e.kind === 'slime' ? 11 : 6); e.vz += nz * (e.kind === 'slime' ? 11 : 6); if (e.state === 'windup' && e.kind !== 'boss') e.state = 'chase'; e.stag = 0.25; }
-  if (e.state === 'idle' || e.state === 'return') e.state = 'chase';
-  if (e.kind === 'boss' && !e.phase2 && e.hp < e.maxHp / 2) { e.phase2 = true; toast('Le Colosse appelle des Brumelins à l’aide !'); spawnEnemy('slime', e.x + 6, e.z, 'ridge-adds').state = 'chase'; spawnEnemy('slime', e.x - 6, e.z, 'ridge-adds').state = 'chase'; e.d = { ...e.d, speed: 4.4, wind: 0.8 }; shake(0.8); }
-  if (e.hp <= 0) killEnemy(e);
-}
-function killEnemy(e) {
-  e.alive = false; save.kills++; play('death'); burst(e.x, e.y + 1, e.z, e.kind === 'boss' ? 60 : 18, e.kind === 'slime' ? 'slime' : e.kind === 'boss' ? 'violet' : 'stone', e.kind === 'boss' ? 12 : 7, 0.22, 1.2);
-  e.dieT = 0.6;
-  if (e.kind === 'boss') { save.cleared.ridge = true; $('bossBar').hidden = true; Audio.setMode('explore'); toast('Le Colosse de cristal s’effondre. La barrière se dissout !'); openZone('ridge'); writeSave(); }
-  if (e.zone && ZONES[e.zone] && e.zone !== 'ridge') {
-    const left = enemies.filter((x) => x.alive && x.zone === e.zone).length;
-    if (!left) { save.cleared[e.zone] = true; toast(save.runes[e.zone] ? 'Zone libérée : la barrière s’ouvre !' : 'Zone libérée. Il reste l’énigme de la stèle.'); if (zoneOpen(e.zone)) openZone(e.zone); writeSave(); }
-  }
-  if (R() < (e.kind === 'slime' ? 0.25 : 0.5)) dropFlower(e.x, e.z);
-}
 function dropFlower(x, z) { const f = pickups.find((p) => p.kind === 'flower' && p.taken); if (!f) return; f.x = x + 0.6; f.z = z; f.e.setPosition(f.x, groundAt(f.x, f.z), f.z); f.e.enabled = true; f.taken = false; }
-function updateEnemies(dt) {
-  const p = player;
-  for (const e of enemies) {
-    const r = e.rig;
-    if (!e.alive) { if (e.dieT > 0) { e.dieT -= dt; const s = Math.max(0.01, e.dieT / 0.6); r.root.setLocalScale(s, s * 0.6, s); if (e.dieT <= 0) r.root.enabled = false; } continue; }
-    if (e.flash > 0) e.flash -= dt;
-    const dx = p.x - e.x, dz = p.z - e.z, d = Math.hypot(dx, dz), D = e.d;
-    e.t += dt; e.cd -= dt; e.stag -= dt;
-    let tvx = 0, tvz = 0;
-    if (e.state === 'dormant') { if (d < 24 && !p.dead) { e.state = 'chase'; $('bossBar').hidden = false; $('bossName').textContent = D.name; Audio.setMode('boss'); showZoneTitle('Colosse de cristal', 'Gardien de la crête'); } }
-    else if (e.state === 'idle') {
-      if (e.t > 2.5) { e.t = 0; const a = R() * Math.PI * 2; e.tx = e.hx + Math.cos(a) * 5; e.tz = e.hz + Math.sin(a) * 5; }
-      const ex = e.tx - e.x, ez = e.tz - e.z, l = Math.hypot(ex, ez); if (l > 0.5) { tvx = ex / l * D.speed * 0.35; tvz = ez / l * D.speed * 0.35; }
-      if (d < D.aggro && !p.dead) e.state = 'chase';
-    } else if (e.state === 'chase') {
-      if (p.dead || dist2(e.x, e.z, e.hx, e.hz) > (e.kind === 'boss' ? 40 : 30)) e.state = 'return';
-      else if (d < D.range + (e.kind === 'boss' ? 0.5 : 0) && e.cd <= 0 && e.stag <= 0) { e.state = 'windup'; e.t = 0; e.lungeX = dx / (d || 1); e.lungeZ = dz / (d || 1); if (e.kind === 'boss') e.slamX = p.x, e.slamZ = p.z; }
-      else if (d > D.range * 0.7) { tvx = dx / d * D.speed; tvz = dz / d * D.speed; }
-      e.yaw = angleLerp(e.yaw, Math.atan2(dx, dz), clamp(8 * dt, 0, 1));
-    } else if (e.state === 'windup') {
-      if (e.t >= D.wind) { e.state = 'strike'; e.t = 0;
-        if (e.kind === 'slime') { e.vx = e.lungeX * 13; e.vz = e.lungeZ * 13; }
-        else if (e.kind === 'golem') { const ang = Math.abs(((Math.atan2(dx, dz) - e.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI); if (d < D.range + 0.6 && ang < 1.1) hurtPlayer(D.dmg, e.x, e.z); play('slam'); shake(0.25); }
-        else { const sd = dist2(p.x, p.z, e.slamX, e.slamZ); if (sd < 5.2 && p.grounded) hurtPlayer(D.dmg, e.slamX, e.slamZ); play('slam'); shake(0.9); burst(e.slamX, groundAt(e.slamX, e.slamZ) + 0.2, e.slamZ, 26, 'violet', 9, 0.25, 0.9); }
-      } else if (e.kind === 'boss') e.yaw = angleLerp(e.yaw, Math.atan2(dx, dz), clamp(3 * dt, 0, 1));
-    } else if (e.state === 'strike') {
-      if (e.kind === 'slime' && !e.hitDone && d < 1.5) { hurtPlayer(D.dmg, e.x, e.z); e.hitDone = true; }
-      if (e.t > (e.kind === 'slime' ? 0.45 : 0.6)) { e.state = 'chase'; e.cd = e.kind === 'boss' ? (e.phase2 ? 1.2 : 1.8) : 1.2 + R(); e.hitDone = false; }
-    } else if (e.state === 'return') {
-      const hx = e.hx - e.x, hz = e.hz - e.z, l = Math.hypot(hx, hz); e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.3 * dt);
-      if (l < 1.5) { e.state = e.kind === 'boss' ? 'dormant' : 'idle'; if (e.kind === 'boss') { $('bossBar').hidden = true; Audio.setMode('explore'); } } else { tvx = hx / l * D.speed; tvz = hz / l * D.speed; e.yaw = angleLerp(e.yaw, Math.atan2(hx, hz), clamp(6 * dt, 0, 1)); }
-    }
-    if (e.state === 'idle' && Math.hypot(tvx, tvz) > 0.1) e.yaw = angleLerp(e.yaw, Math.atan2(tvx, tvz), clamp(4 * dt, 0, 1));
-    const k = e.state === 'strike' && e.kind === 'slime' ? 0.02 : clamp(8 * dt, 0, 1);
-    e.vx = lerp(e.vx, tvx, k); e.vz = lerp(e.vz, tvz, k);
-    let nx = e.x + e.vx * dt, nz = e.z + e.vz * dt;
-    for (const c of nearColliders(nx, nz)) { if (!c.on) continue; const cx = nx - c.x, cz = nz - c.z, cd = Math.hypot(cx, cz), m = c.r + D.radius * 0.8; if (cd < m && cd > 0.0001) { nx = c.x + cx / cd * m; nz = c.z + cz / cd * m; } }
-    for (const o of enemies) { if (o === e || !o.alive) continue; const cx = nx - o.x, cz = nz - o.z, cd = Math.hypot(cx, cz), m = (D.radius + o.d.radius) * 0.8; if (cd < m && cd > 0.0001) { nx += cx / cd * (m - cd) * 0.5; nz += cz / cd * (m - cd) * 0.5; } }
-    if (terrainH(nx, nz) > 0.2) { e.x = nx; e.z = nz; } else { e.vx = 0; e.vz = 0; }
-    e.y = groundAt(e.x, e.z);
-    animateEnemy(e, dt, d);
-  }
-  const boss = W.boss; if (boss && boss.alive && boss.state !== 'dormant') $('bossHp').style.transform = `scaleX(${clamp(boss.hp / boss.maxHp, 0, 1)})`;
-}
-function animateEnemy(e, dt, d) {
-  const r = e.rig, t = state.time + e.hx;
-  r.root.setPosition(e.x, e.y, e.z); r.root.setEulerAngles(0, e.yaw * 180 / Math.PI, 0);
-  if (e.kind === 'slime') {
-    let sy = 1 + Math.sin(t * 6) * 0.08, sxz = 1 - Math.sin(t * 6) * 0.05, y = Math.max(0, Math.sin(t * 6)) * 0.25;
-    if (e.state === 'windup') { const k = e.t / e.d.wind; sy = 1 - k * 0.35; sxz = 1 + k * 0.25; y = 0; }
-    if (e.state === 'strike') { sy = 1.25; sxz = 0.85; y = 0.6; }
-    r.body.setLocalScale(sxz, sy, sxz); r.body.setLocalPosition(0, y, 0);
-    if (e.flash > 0) setGlow(r.mat, 'flash', '#FFFFFF', 2); else if (e.state === 'windup') setGlow(r.mat, 'wind', '#E65A33', 0.9); else setGlow(r.mat, 'idle', '#1E7F6C', 0.5);
-  } else {
-    const sp = Math.hypot(e.vx, e.vz), sw = Math.sin(t * 5) * clamp(sp / 3, 0, 1);
-    let aL = sw * 25, aR = -sw * 25, lean = 0;
-    if (e.state === 'windup') { const k = e.t / e.d.wind; aL = aR = -k * 150; lean = -k * 12; }
-    if (e.state === 'strike') { const k = clamp(e.t / 0.15, 0, 1); aL = aR = lerp(-150, 30, k); lean = lerp(-12, 18, k); }
-    r.parts.armL.setLocalEulerAngles(aL, 0, 0); r.parts.armR.setLocalEulerAngles(aR, 0, 0); r.body.setLocalEulerAngles(lean, 0, Math.sin(t * 2.5) * 2 * clamp(sp, 0, 1));
-    if (e.flash > 0) setGlow(r.eyeMat, 'flash', '#FFFFFF', 5); else if (e.state === 'windup') setGlow(r.eyeMat, 'hot', '#FF4A3A', 5); else setGlow(r.eyeMat, 'idle', e.kind === 'boss' ? '#D9B8FF' : '#7FE3FF', 3);
-    if (e.kind === 'boss' && e.state === 'windup' && R() < dt * 30) burst(e.slamX, groundAt(e.slamX, e.slamZ) + 0.1, e.slamZ, 1, 'red', 4, 0.2, 0.4, 2);
-  }
-}
 
 /* ---------- Ramassables ---------- */
 function updatePickups(dt) {
@@ -955,7 +1508,7 @@ function updatePickups(dt) {
     if (p.taken) { if (p.kind === 'flower' && p.respawn > 0) { p.respawn -= dt; if (p.respawn <= 0) { p.taken = false; p.e.enabled = true; } } continue; }
     if (dist2(p.x, p.z, player.x, player.z) < (p.kind === 'heart' ? 1.8 : 1.4)) {
       if (p.kind === 'flower') { if (player.hp >= player.maxHp) continue; player.hp = Math.min(player.maxHp, player.hp + 30); play('heal'); floater(player.x, player.y + 2.3, player.z, '+30', ''); burst(p.x, groundAt(p.x, p.z) + 0.7, p.z, 10, 'gold', 3, 0.12, 0.8); p.taken = true; p.respawn = 90; p.e.enabled = false; }
-      else { save.hearts.push(p.id); player.maxHp += 25; player.hp = player.maxHp; play('pickup'); burst(p.x, groundAt(p.x, p.z) + 1.2, p.z, 24, 'red', 5, 0.16, 1); p.taken = true; p.e.enabled = false; toast(`Pierre de cœur trouvée : vie maximale +25 (${save.hearts.length}/4)`); writeSave(); }
+      else { save.hearts.push(p.id); player.maxHp = stats().maxHp; player.hp = player.maxHp; play('pickup'); burst(p.x, groundAt(p.x, p.z) + 1.2, p.z, 24, 'red', 5, 0.16, 1); p.taken = true; p.e.enabled = false; toast(`Pierre de cœur trouvée : vie maximale +25 (${save.hearts.length}/4)`); writeSave(); }
     }
   }
 }
@@ -983,9 +1536,27 @@ function talkIlyas() {
         { label: 'Que sont les stèles ?', next: [{ who: 'Ilyas', text: 'Chaque sanctuaire est scellé par trois runes. La stèle indique l’ordre dans lequel les éveiller. Une erreur, et il faudra recommencer.' }] },
         { label: 'Je pars sur-le-champ.', next: [] },
       ] },
-      { who: 'Ilyas', text: 'Rapporte les éclats sur l’autel, au centre de l’île. Allume les totems d’Aube en chemin : ils garderont ta trace si tu tombes. Que la lumière te guide.' },
-    ], () => { setQuestChanged(); toast('Nouvel objectif : retrouver les trois éclats d’Aube'); });
+      { who: 'Ilyas', text: 'Rapporte les éclats sur l’autel, au centre de l’île. Allume les totems d’Aube en chemin : ils garderont ta trace si tu tombes.' },
+      { who: 'Ilyas', text: 'Prends aussi cette flûte. Ses notes repoussent les créatures, et sa mélodie soigne les blessures. On dit qu’un arc et un bâton de braise dorment dans les coffres de l’île… Reviens me voir si tu trouves de l’or : je vends potions et flèches, et je peux renforcer ton équipement.' },
+    ], () => { save.items.flute = true; hud.weapons = null; writeSave(); setQuestChanged(); showLoot('Nouvel instrument', [`<b>🎶 Flûte d’Aube</b><small>${ITEMS.flute.desc}</small>`]); toast('Nouvel objectif : retrouver les trois éclats d’Aube'); });
   }
+  const menu = (text) => dialogue([{ who: 'Ilyas', text, choices: [
+    { label: 'Commercer et forger', act: () => shopLines() },
+    { label: 'Un conseil ?', next: [{ who: 'Ilyas', text: advice() }] },
+    { label: 'À bientôt.', next: [] }] }]);
+  if (save.finished) return menu('Regarde ce ciel… Tu as rendu l’Aube à cette île. Que puis-je encore faire pour toi ?');
+  return menu(n === 3 ? 'Les trois éclats ! Je les sens vibrer d’ici. Va jusqu’à l’autel du Temple. Avant cela, as-tu besoin de quelque chose ?' : `${n} éclat${n > 1 ? 's' : ''} sur 3. Que puis-je faire pour toi ?`);
+}
+function advice() {
+  const tips = ['Les Gardiens de pierre se protègent derrière leurs bras : frappe-les après une charge manquée, quand ils sont étourdis.',
+    'Les Sylvains se téléportent quand on les approche. L’arc ou une boule de feu les atteignent de loin.',
+    'Gèle tes ennemis avec la nova du bâton : un ennemi gelé subit des dégâts accrus.',
+    'Les Brumelins se divisent en deux petits quand ils meurent. Et méfie-toi de leur acide : il ralentit.',
+    'Le Colosse s’entoure d’un bouclier alimenté par trois cristaux. Détruis-les. Enragé, ses ondes de choc se sautent.',
+    `Il reste ${CHESTS.length - save.chests.length} coffres sur l’île. Les plus précieux sont gardés.`];
+  return tips[Math.floor(R() * tips.length)];
+}
+function _oldIlyas(n) {
   if (save.finished) return dialogue([{ who: 'Ilyas', text: 'Regarde ce ciel… Tu as rendu l’Aube à cette île. Je n’ai plus qu’à entretenir le feu, désormais.' }]);
   if (n === 3) return dialogue([{ who: 'Ilyas', text: 'Les trois éclats ! Je les sens vibrer d’ici. Va jusqu’à l’autel du Temple, au centre de l’île.' }]);
   const tips = [];
@@ -1094,6 +1665,13 @@ function updateHud() {
   if (hud.hp !== hp) { hud.hp = hp; $('hpText').textContent = hp; }
   if (hud.hpS !== hpS) { hud.hpS = hpS; $('hpBar').style.transform = `scaleX(${hpS})`; }
   if (hud.stS !== stS) { hud.stS = stS; $('stBar').style.transform = `scaleX(${stS})`; }
+  const mpS = clamp(p.mp / stats().maxMp, 0, 1).toFixed(2); if (hud.mpS !== mpS) { hud.mpS = mpS; $('mpBar').style.transform = `scaleX(${mpS})`; }
+  const purse = `🪙 ${save.gold} · 🧪 ${save.potions.hp} · 💧 ${save.potions.mp}${save.items.bow ? ` · 🏹 ${save.arrows}` : ''}`;
+  if (hud.purse !== purse) { hud.purse = purse; $('purse').textContent = purse; }
+  const wkey = WEAPONS.map((w) => `${w.id}:${!!save.items[w.id]}:${p.weapon === w.id}:${Math.ceil(p.powerCd[w.id])}`).join('|');
+  if (hud.weapons !== wkey) { hud.weapons = wkey; $('weapons').innerHTML = WEAPONS.map((w) => `<div class="wslot ${save.items[w.id] ? '' : 'locked'} ${p.weapon === w.id ? 'on' : ''}" title="${w.name} — pouvoir : ${w.power}"><kbd>${w.key}</kbd><span>${save.items[w.id] ? w.icon : '?'}</span>${p.powerCd[w.id] > 0 ? `<em>${Math.ceil(p.powerCd[w.id])}</em>` : ''}</div>`).join('') + `<div class="wpower">F · ${WEAPONS.find((w) => w.id === p.weapon).power}</div>`; }
+  const ch = (p.weapon === 'bow' || p.weapon === 'staff') && locked(); if (hud.cross !== ch) { hud.cross = ch; $('crosshair').hidden = !ch; }
+  $('crosshair').classList.toggle('charge', p.charging && p.chargeT > 0.85);
   if (questDirty && save) { questDirty = false; const q = questText().join('|'); if (hud.q !== q) { hud.q = q; const [t, a, b] = q.split('|'); $('questTitle').textContent = t; $('questText').textContent = a; $('questSub').textContent = b; renderHearts(); } }
   if (Math.floor(state.time * 2) % 4 === 0) questDirty = true;
 }
@@ -1121,7 +1699,7 @@ function advance() {
   if (l.choices) return;
   dlg.i++; if (dlg.i >= dlg.lines.length) return endDialogue(); showLine();
 }
-function choose(i) { const l = dlg.lines[dlg.i]; const c = l.choices?.[i]; if (!c) return; play('select'); dlg.lines.splice(dlg.i + 1, 0, ...c.next); dlg.i++; if (dlg.i >= dlg.lines.length) return endDialogue(); showLine(); }
+function choose(i) { const l = dlg.lines[dlg.i]; const c = l.choices?.[i]; if (!c) return; play('select'); const extra = c.act ? (c.act() || []) : []; dlg.lines.splice(dlg.i + 1, 0, ...extra, ...(c.next || [])); dlg.i++; if (dlg.i >= dlg.lines.length) return endDialogue(); showLine(); }
 function endDialogue() { $('dialogue').hidden = true; const d = dlg; dlg = null; state.mode = 'playing'; d.done?.(); setQuestChanged(); }
 $('dlgChoices').addEventListener('click', (e) => { const b = e.target.closest('[data-choice]'); if (b) choose(Number(b.dataset.choice)); });
 $('dialogue').addEventListener('click', (e) => { if (!e.target.closest('[data-choice]')) advance(); });
@@ -1145,6 +1723,8 @@ function markers() {
   if (Object.keys(save.shards).length === 3 && !save.finished) m.push([0, 0, '#F2C46D', 'goal']);
   for (const k of save.checkpoints) m.push([CHECKPOINTS[k].x, CHECKPOINTS[k].z, '#FF9D4D', 'cp']);
   if (save.talked) m.push([ilyas.x, ilyas.z, '#79B8FF', 'npc']);
+  for (const c of chests) if (!c.open && (save.items.map || dist2(c.x, c.z, player.x, player.z) < 30)) m.push([c.x, c.z, '#FFE07A', 'chest']);
+  for (const c of chests) if (!c.open && save.items.map) m.push([c.x, c.z, c.rare ? '#FFD36B' : '#C9A06B', 'chest']);
   return m;
 }
 function drawMinimap() {
@@ -1171,7 +1751,7 @@ function drawBigMap() {
 }
 
 /* Écrans et flux de jeu */
-const SCREENS = ['title', 'pause', 'settings', 'controls', 'credits', 'map', 'gameover', 'victory'];
+const SCREENS = ['title', 'pause', 'settings', 'controls', 'credits', 'map', 'gameover', 'victory', 'inventory'];
 let screenStack = [];
 function show(id) { SCREENS.forEach((s) => { $(s).hidden = s !== id; }); }
 function openOverlay(id) { screenStack.push(SCREENS.find((s) => !$(s).hidden) || null); show(id); if (id === 'settings') fillSettings(); if (id === 'map') drawBigMap(); }
@@ -1183,8 +1763,13 @@ function setPaused(on) {
 function onPauseKey() {
   if (state.mode === 'dialogue') return;
   if (state.mode === 'map') { toggleMap(); return; }
+  if (state.mode === 'inventory') { toggleInventory(); return; }
   if (screenStack.length) { back(); return; }
   if (state.mode === 'playing') setPaused(true); else if (state.mode === 'paused') setPaused(false);
+}
+function toggleInventory() {
+  if (state.mode === 'playing') { state.mode = 'inventory'; screenStack = []; renderInventory(); show('inventory'); if (locked()) { state.ignoreUnlock = true; document.exitPointerLock(); } }
+  else if (state.mode === 'inventory') { state.mode = 'playing'; show(null); }
 }
 function toggleMap() {
   if (state.mode === 'playing') { state.mode = 'map'; screenStack = []; show('map'); drawBigMap(); if (locked()) { state.ignoreUnlock = true; document.exitPointerLock(); } }
@@ -1215,6 +1800,8 @@ document.addEventListener('click', (e) => {
   if (a === 'quit') quitToKairos();
   if (a === 'respawn') respawn();
   if (a === 'explore') { show(null); state.mode = 'playing'; }
+  if (a === 'inventory') { if (state.mode === 'paused') { show(null); state.mode = 'playing'; } toggleInventory(); }
+  if (a === 'closeInv') toggleInventory();
 });
 
 /* Sauvegardes */
@@ -1236,11 +1823,15 @@ function applySaveToWorld() {
   for (const p of pickups) if (p.kind === 'heart') { p.taken = save.hearts.includes(p.id); p.e.enabled = !p.taken; }
   altar.sockets.forEach((s, i) => { const key = Object.keys(ZONES)[i]; s.render.material = glowMat('socket', ZONES[key].color, !!save.finished); });
   altar.beam.enabled = !!save.finished; altar.beamGrow = 1;
+  for (const c of chests) { c.open = save.chests.includes(c.id); c.lidT = c.open ? 1 : 0; c.lid.setLocalEulerAngles(c.open ? -110 : 0, 0, 0); if (c.light) c.light.enabled = !c.open; }
   setDawn(!!save.finished, 1);
   renderShards(); renderHearts();
 }
 function startGame(s) {
-  save = s; state.play = s.play || 0; player.maxHp = 100 + s.hearts.length * 25; player.hp = player.maxHp; player.st = 100; player.dead = false;
+  // anciennes sauvegardes : nouveaux champs
+  s.gold ??= 0; s.potions ??= { hp: 1, mp: 0 }; s.arrows ??= 0; s.items ??= { sword: true }; s.chests ??= []; s.upgrades ??= {}; if (s.talked) s.items.flute = true;
+  save = s; state.play = s.play || 0; player.maxHp = stats().maxHp; player.hp = player.maxHp; player.st = 100; player.dead = false; player.mp = stats().maxMp; player.hot = player.slow = player.rooted = 0;
+  for (const k in player.powerCd) player.powerCd[k] = 0; player.weapon = 'flute'; selectWeapon('sword'); hud.weapons = null; hud.purse = null;
   const sk = window.aube?.skipStart || {};
   if (!sk.apply) applySaveToWorld(); if (!sk.enemies) populateEnemies();
   const cp = CHECKPOINTS[s.talked ? s.checkpoint : 'camp'];
@@ -1262,7 +1853,7 @@ function die() {
   setTimeout(() => { state.mode = 'dead'; show('gameover'); if (locked()) document.exitPointerLock(); }, 900);
 }
 function respawn() {
-  player.dead = false; player.hp = player.maxHp; player.st = 100; populateEnemies(); applySaveToWorld();
+  player.dead = false; player.hp = player.maxHp; player.st = 100; player.mp = stats().maxMp; player.slow = player.rooted = 0; populateEnemies(); applySaveToWorld();
   const cp = CHECKPOINTS[save.checkpoint] || CHECKPOINTS.camp; placePlayer(cp.x, cp.z + 2.5, null);
   $('bossBar').hidden = true; show(null); state.mode = 'playing'; Audio.setMode('explore');
 }
@@ -1308,7 +1899,8 @@ function setDawn(on, k) {
   window.aube = {          // accès de test et de débogage
     pc, get app() { return app; }, render: (on) => { app.autoRender = on; app.renderNextFrame = true; }, snap: () => new Promise((r) => { app.renderNextFrame = true; app.once('frameend', r); }), get camera() { return camera; }, get cameraFrame() { return cameraFrame; }, W, sun, settings, applyQuality, setDawn,
     get state() { return state.mode; }, get save() { return save; }, player, enemies, ZONES, zoneObjs, interactables, device: device.isWebGPU ? 'webgpu' : 'webgl2',
-    teleport: (x, z) => placePlayer(x, z, null), interact: (id) => interactables.find((i) => i.id === id)?.act(), kill: (zone) => enemies.filter((e) => e.alive && (!zone || e.zone === zone)).forEach((e) => damageEnemy(e, 9999, 0, 0)),
-    press: (code) => pressed.add(code), finishDialogue: () => { while (dlg) { dlg.shown = dlg.full.length; if (dlg.lines[dlg.i].choices) choose(dlg.lines[dlg.i].choices.length - 1); else advance(); } },
+    teleport: (x, z) => placePlayer(x, z, null), slay: (i) => { const e = enemies[i]; if (e?.alive) { e.hp = 0; killEnemy(e); } }, interact: (id) => interactables.find((i) => i.id === id)?.act(), kill: (zone) => { for (let k = 0; k < 6; k++) enemies.filter((e) => e.alive && (!zone || e.zone === zone || (zone === 'ridge' && e.zone === 'pylon'))).forEach((e) => { e.hp = 0; if (e.kind === 'boss') { e.shield = false; e.rig.shield.enabled = false; } killEnemy(e); }); },
+    get gold() { return save.gold; }, select: (w) => selectWeapon(w), stats, chests, projectiles, __reflex: (r) => enemyReflex(r), __dmg: (e, d) => damageEnemy(e, d, 0, 0, false, 'melee'),
+    press: (code) => pressed.add(code), chests, projectiles, selectWeapon, stats, openChest: (id) => openChest(chests.find((c) => c.id === id)), finishDialogue: () => { while (dlg) { dlg.shown = dlg.full.length; if (dlg.lines[dlg.i].choices) choose(dlg.lines[dlg.i].choices.length - 1); else advance(); } },
   };
 })();
