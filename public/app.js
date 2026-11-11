@@ -524,7 +524,7 @@
     id: 'aube', url: '/jeux/aventure/', title: 'Aube', subtitle: 'Les Reliques du Gardien', saveKey: 'aube.save.v1',
     pitch: 'Le soleil ne se lève plus sur l’île d’Aube. Explore une île en 3D, combats à l’épée, à l’arc, par la magie ou à la flûte enchantée, déjoue des gardiens rusés, pille les coffres anciens et rapporte les trois éclats au Temple.',
     tags: ['Aventure 3D', 'Action', 'Magie', 'Trésors', 'Énigmes'],
-    features: ['4 armes : épée, arc des vents, bâton de braise (feu et givre), flûte d’Aube (ondes et guérison)', 'Ennemis à réflexes et pouvoirs : esquives, parades, acide, charges, téléportation, racines', 'Colosse de cristal en trois phases : bouclier, renforts, rage', '10 coffres, or, potions, objets rares, boutique et inventaire', 'Île ouverte, énigmes de runes, quêtes, sauvegardes ; clavier et souris, manette, tactile'],
+    features: ['4 armes : épée, arc des vents, bâton de braise (feu et givre), flûte d’Aube (ondes et guérison)', 'Ennemis à réflexes et pouvoirs : esquives, parades, acide, charges, téléportation, racines', 'Colosse de cristal en trois phases : bouclier, renforts, rage', '10 coffres, or, potions, objets rares, boutique et inventaire', 'Personnages 3D animés : Néra ou K-7 l’androïde, accompagnés de Roux le renard', 'Île ouverte, énigmes de runes, quêtes, sauvegardes ; clavier et souris, manette, tactile'],
   }];
   function gameProgress(g) {
     try { const s = JSON.parse(localStorage.getItem(g.saveKey) || 'null'); if (!s) return null;

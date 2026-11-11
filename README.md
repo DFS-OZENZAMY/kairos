@@ -35,11 +35,13 @@ Rubrique **Jeux** de la navigation. Le jeu s’ouvre en plein écran **dans Kair
 - **Ennemis à réflexes et pouvoirs** : ils esquivent coups et projectiles, parent de face (gardiens), encerclent la joueuse et n’attaquent qu’à deux à la fois. Brumelins (acide ralentissant, division en mourant), Gardiens de pierre (charge, onde au sol, garde), Sylvains corrompus (téléportation, orbes à tête chercheuse, racines), Colosse de cristal en trois phases (bouclier alimenté par trois cristaux, renforts, rage et ondes de choc).
 - **Trésors** : dix coffres (certains gardés), or, potions, flèches, arc, bâton, amulette, anneau, talisman, rune de force, carte au trésor ; boutique et forge chez Ilyas ; inventaire (I).
 - Relief lissé et texturé, vagues animées, nuages, ombres douces.
+- **Personnages 3D animés (glTF)** : modèles avec squelette et animations (repos, marche, course, coup, saut, sort, coup reçu, mort), mise à l’échelle automatique, armes tenues par l’os de la main. Écran de choix du héros : Néra (humaine) ou **K-7 (androïde)** ; **Roux**, un renard animé, accompagne le joueur. Espèces à venir : homme-loup, reptilien, extraterrestre.
+  Pour ajouter un personnage : déposer un `.glb` (maillage + squelette + animations, par exemple exporté de Mixamo ou d’un outil de génération 3D) dans `public/jeux/aventure/models/` et ajouter une entrée dans `CHARACTERS` (`game.js`) avec les noms des animations, l’os de la main et la taille voulue. Crédits des modèles : `models/CREDITS.txt`.
 - Trois sanctuaires : vaincre les gardiens, lire la stèle et éveiller les runes dans le bon ordre, prendre l’éclat ; finale au Temple de l’Aube.
 - Sage Ilyas (dialogues à choix), totems de sauvegarde, pierres de cœur cachées, fleurs de soin, mini-carte et carte (M), quêtes, menus, réglages (qualité, rendu, sensibilité, champ de vision, volumes, axe inversé, secousses).
 - Musique générative et bruitages synthétisés (Web Audio), clavier et souris, manette, écran tactile. Sauvegarde locale (`localStorage`).
 
-Code : `public/jeux/aventure/` (`index.html`, `game.css`, `game.js`). Tests : `tests/aube_game_e2e.py` (partie complète, 37 vérifications), `tests/aube_combat_e2e.py` (armes, magie, IA, boss, trésors, 25 vérifications) et `tests/games_hub_e2e.py` (rubrique Jeux dans Kairos, 8 vérifications).
+Code : `public/jeux/aventure/` (`index.html`, `game.css`, `game.js`). Tests : `tests/aube_game_e2e.py` (partie complète, 37 vérifications), `tests/aube_combat_e2e.py` (armes, magie, IA, boss, trésors, 25 vérifications), `tests/aube_characters_e2e.py` (personnages glTF, 13 vérifications) et `tests/games_hub_e2e.py` (rubrique Jeux dans Kairos, 8 vérifications).
 
 ## Synchronisation entre appareils (Cloudflare)
 

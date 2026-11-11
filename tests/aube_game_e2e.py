@@ -19,7 +19,7 @@ async def main():
     async def shot(path):
       try: await asyncio.wait_for(E("aube.snap()"), 60); await pg.screenshot(path=path, timeout=60000)
       except Exception: pass   # capture facultative : le rendu logiciel des tests est très lent
-    await pg.click("[data-act='new']"); await pg.wait_for_timeout(1200)
+    await pg.click("[data-act='new']"); await pg.click(".char-card[data-char='nera']"); await pg.wait_for_timeout(1200)
     ok(await E("window.aube.state") == "playing" and not await E("document.getElementById('hud').hidden"), "nouvelle partie : interface en jeu affichée")
     q = await E("document.getElementById('questText').textContent"); ok("Ilyas" in q, "objectif initial : " + q)
     # déplacement clavier (code physique KeyW = Z sur AZERTY)

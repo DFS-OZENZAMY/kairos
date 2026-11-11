@@ -233,8 +233,8 @@ async function boot() {
   device.maxPixelRatio = Math.min(window.devicePixelRatio || 1, Q().ratio);
   const opts = new pc.AppOptions();
   opts.graphicsDevice = device;
-  opts.componentSystems = [pc.RenderComponentSystem, pc.CameraComponentSystem, pc.LightComponentSystem];
-  opts.resourceHandlers = [pc.TextureHandler];
+  opts.componentSystems = [pc.RenderComponentSystem, pc.CameraComponentSystem, pc.LightComponentSystem, pc.AnimComponentSystem];
+  opts.resourceHandlers = [pc.TextureHandler, pc.ContainerHandler, pc.AnimClipHandler, pc.AnimStateGraphHandler];
   app = new pc.AppBase(canvas); app.init(opts);
   app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW); app.setCanvasResolution(pc.RESOLUTION_AUTO);
   addEventListener('resize', () => app.resizeCanvas());
@@ -386,6 +386,7 @@ async function buildWorld() {
   buildStructures();
   await progress(0.82, 'Éveil des gardiens…');
   buildCamera(); buildPlayer(); buildParticles(); buildNPC(); buildInteractables(); buildMinimapImage();
+  await progress(0.83, 'Chargement des personnages…'); await loadCharacters();
   await warmShaders();
   await progress(1, 'L’île t’attend.');
 }
@@ -441,7 +442,7 @@ function buildVegetation() {
 /* ---------- Temple, camp, ruines, cristaux, totems ---------- */
 const state = { mode: 'loading', time: 0, play: 0 };
 let save = null;
-const newSave = () => ({ v: 1, shards: {}, runes: {}, cleared: {}, hearts: [], checkpoint: 'camp', checkpoints: ['camp'], talked: 0, kills: 0, deaths: 0, play: 0, finished: false, created: Date.now(),
+const newSave = () => ({ v: 1, shards: {}, runes: {}, cleared: {}, hearts: [], checkpoint: 'camp', checkpoints: ['camp'], talked: 0, kills: 0, deaths: 0, play: 0, finished: false, created: Date.now(), character: 'nera',
   gold: 0, potions: { hp: 1, mp: 0 }, arrows: 0, items: { sword: true }, chests: [], upgrades: {} });
 const CHECKPOINTS = { camp: { x: 6, z: 146, name: 'Camp d’Ilyas' }, forest: { x: -88, z: 42, name: 'Totem de la forêt' }, lake: { x: 88, z: -4, name: 'Totem du lac' }, ridge: { x: 6, z: -100, name: 'Totem de la crête' }, temple: { x: 0, z: 28, name: 'Seuil du Temple' } };
 const GLYPHS = ['☀', '☾', '✦', '◆', '❂', '♆', '✧', '⚘'];
@@ -509,7 +510,88 @@ async function warmShaders() {
     await nextFrame(); await nextFrame();
     made.forEach((e) => { if (e !== P.root) e.destroy(); });
   }
+  // personnages glTF : un rendu pour mettre à jour les squelettes, puis mise à l'échelle automatique
+  P.root.setPosition(spot); for (const m of Object.values(MODELS.player)) m.holder.enabled = true;
+  if (W.fox) { W.fox.holder.enabled = true; W.fox.holder.setPosition(spot.x + 2.5, spot.y, spot.z); }
+  await progress(0.98, 'Préparation des personnages…'); await nextFrame(); await nextFrame();
+  for (const m of [...Object.values(MODELS.player), W.fox].filter(Boolean)) measureModel(m);
+  await nextFrame();
+  for (const m of Object.values(MODELS.player)) m.holder.enabled = false; if (W.fox) W.fox.holder.enabled = false;
   P.root.setPosition(0, -50, 0);
+}
+
+/* =====================================================================
+   Personnages 3D animés (glTF : maillage, squelette, animations)
+   Pour ajouter un personnage : déposer le .glb dans models/ et ajouter une entrée ci-dessous
+   (noms des animations du fichier, os de la main qui tient l'arme, taille voulue en mètres).
+   ===================================================================== */
+const CHARACTERS = {
+  nera: { name: 'Néra', species: 'Humaine', desc: 'Exploratrice d’Aube, agile et polyvalente.', icon: '🧭', builtin: true },
+  k7: { name: 'K-7', species: 'Androïde', desc: 'Automate d’un peuple disparu, réveillé par la lumière d’Aube. Lourd, mais infatigable.', icon: '🤖',
+    url: 'models/RobotExpressive.glb', height: 2.05, hand: 'Palm2.R', grip: { pos: [0, 0, 0], rot: [90, 0, 0] },
+    anims: { idle: 'Idle', walk: 'Walking', run: 'Running', attack: 'Punch', jump: 'Jump', death: 'Death', cast: 'Yes', hurt: 'No', win: 'Dance' },
+    credit: '« RobotExpressive » de Tomás Laulhé (Quaternius), licence CC0' },
+};
+const UPCOMING = [{ name: 'Homme-loup', icon: '🐺' }, { name: 'Reptilien', icon: '🦎' }, { name: 'Extraterrestre', icon: '👽' }];
+const COMPANION = { name: 'Roux', url: 'models/Fox.glb', height: 0.85, yawOffset: 0, anims: { idle: 'Survey', walk: 'Walk', run: 'Run' } };
+const ONESHOT = new Set(['attack', 'jump', 'death', 'cast', 'hurt']);
+const MODELS = { player: {} };
+const loadContainer = (url) => (loadContainer.c ||= {})[url] ||= new Promise((res, rej) => app.assets.loadFromUrl(url, 'container', (err, a) => (err ? rej(err) : res(a))));
+async function createModel(def) {
+  const asset = await loadContainer(def.url);
+  const holder = new pc.Entity(def.name), inner = asset.resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
+  holder.addChild(inner);
+  const tracks = asset.resource.animations.map((a) => a.resource);
+  const names = Object.keys(def.anims).filter((k) => tracks.some((t) => t.name === def.anims[k]));
+  holder.addComponent('anim', { activate: true });
+  holder.anim.loadStateGraph(new pc.AnimStateGraph({ layers: [{ name: 'Base', states: [{ name: 'START' }, ...names.map((n) => ({ name: n, speed: 1, loop: !ONESHOT.has(n) }))], transitions: [{ from: 'START', to: 'idle', time: 0 }] }], parameters: {} }));
+  for (const n of names) holder.anim.assignAnimation(n, tracks.find((t) => t.name === def.anims[n]), 'Base');
+  return { holder, inner, def, cur: 'idle', states: new Set(names), x: 0, z: 0, yaw: 0 };
+}
+function measureModel(m) {          // taille voulue, pieds au sol (quelles que soient les unités du fichier)
+  const box = new pc.BoundingBox(); let first = true;
+  for (const r of m.holder.findComponents('render')) for (const mi of r.meshInstances) { if (first) { box.copy(mi.aabb); first = false; } else box.add(mi.aabb); }
+  if (first || box.halfExtents.y <= 0) return false;
+  const k = m.def.height / (box.halfExtents.y * 2), base = box.getMin().y - m.holder.getPosition().y;
+  const s0 = m.inner.getLocalScale().x; m.inner.setLocalScale(s0 * k, s0 * k, s0 * k); m.inner.setLocalPosition(0, -base * k, 0); m.measured = true; return true;
+}
+function playAnim(m, state, blend = 0.18, force = false) {
+  if (!m || !m.states.has(state) || (m.cur === state && !force)) return;
+  m.cur = state; try { m.holder.anim.baseLayer.transition(state, blend, 0); } catch { /* état absent */ }
+}
+async function loadCharacters() {
+  for (const [id, def] of Object.entries(CHARACTERS)) {
+    if (def.builtin) continue;
+    try { const m = await createModel(def); m.holder.enabled = false; P.root.addChild(m.holder); m.hand = def.hand ? m.holder.findByName(def.hand) : null; MODELS.player[id] = m; }
+    catch (e) { console.warn('Personnage indisponible :', def.url, e); delete CHARACTERS[id]; }
+  }
+  try { W.fox = await createModel(COMPANION); W.fox.holder.enabled = false; world.addChild(W.fox.holder); } catch (e) { console.warn('Compagnon indisponible', e); }
+  // support d'arme qui suit l'os de la main sans hériter de son échelle
+  P.mount = new pc.Entity('support-arme'); world.addChild(P.mount); P.grip = new pc.Entity('prise'); P.mount.addChild(P.grip); P.mount.enabled = false;
+}
+function setCharacter(id) {
+  const key = CHARACTERS[id] ? id : 'nera', m = MODELS.player[key] || null;
+  P.char = key; P.model = m;
+  for (const mm of Object.values(MODELS.player)) mm.holder.enabled = mm === m;
+  for (const c of P.body.children) c.enabled = !m;                       // corps procédural masqué pour un modèle 3D
+  if (m) { const g = CHARACTERS[key].grip || { pos: [0, 0, 0], rot: [0, 0, 0] }; P.grip.setLocalPosition(...g.pos); P.grip.setLocalEulerAngles(...g.rot); }
+  for (const [wid, w] of Object.entries(P.weapons)) {
+    const home = P.weaponHome[wid];
+    if (m && m.hand) { w.reparent(P.grip); w.setLocalPosition(0, 0, 0); w.setLocalEulerAngles(...home.gripRot); }
+    else { w.reparent(home.parent); w.setLocalPosition(...home.pos); w.setLocalEulerAngles(...home.rot); }
+  }
+  if (P.mount) P.mount.enabled = !!(m && m.hand);
+}
+function updateCompanion(dt) {
+  const f = W.fox; if (!f || !f.holder.enabled) return;
+  const p = player, tx = p.x - Math.sin(p.yaw) * 2.6 + Math.cos(p.yaw) * 1.4, tz = p.z - Math.cos(p.yaw) * 2.6 - Math.sin(p.yaw) * 1.4;
+  let dx = tx - f.x, dz = tz - f.z, d = Math.hypot(dx, dz);
+  if (d > 45 || terrainH(f.x, f.z) < 0.2) { f.x = tx; f.z = tz; dx = dz = d = 0; }
+  const sp = d > 10 ? 11 : d > 4 ? 7 : d > 1.3 ? 3 : 0;
+  if (sp) { f.x += dx / d * Math.min(sp * dt, d); f.z += dz / d * Math.min(sp * dt, d); f.yaw = angleLerp(f.yaw, Math.atan2(dx, dz), clamp(8 * dt, 0, 1)); }
+  else f.yaw = angleLerp(f.yaw, Math.atan2(p.x - f.x, p.z - f.z), clamp(2 * dt, 0, 1));
+  f.holder.setPosition(f.x, groundAt(f.x, f.z), f.z); f.holder.setEulerAngles(0, f.yaw * 180 / Math.PI + (f.def.yawOffset || 0), 0);
+  playAnim(f, sp > 6 ? 'run' : sp > 0 ? 'walk' : 'idle', 0.25);
 }
 
 /* =====================================================================
@@ -582,6 +664,8 @@ function buildPlayer() {
   prim('box', M.gold, flute, [0, 0.45, 0], [0.07, 0.04, 0.07]);
   bow.enabled = staff.enabled = flute.enabled = false;
   P = { root, body, head, armL, armR, legL, legR, cape: capePivot, sword, trail, mats: M, weapons: { sword, bow, staff, flute } };
+  P.weaponHome = Object.fromEntries(Object.entries(P.weapons).map(([k, w]) => { const lp = w.getLocalPosition(), le = w.getLocalEulerAngles();
+    return [k, { parent: w.parent, pos: [lp.x, lp.y, lp.z], rot: [le.x, le.y, le.z], gripRot: k === 'bow' ? [0, 90, 0] : [80, 0, 0] }]; }));
 }
 const sharedMats = {};
 /** Change l'émissif d'un matériau seulement si l'état change (update() à chaque image recompilerait les shaders). */
@@ -1367,7 +1451,7 @@ function update(dtRaw) {
     let gdt = dt;
     if (hitStop > 0) { hitStop -= dt; gdt = dt * 0.08; }
     const skip = window.aube?.skip || {};
-    if (state.mode === 'playing') { state.play += dt; save.play = state.play; if (!skip.player) updatePlayer(gdt); if (!skip.enemies) { updateEnemies(gdt); updateProjectiles(gdt); updateFx(gdt); } if (!skip.pickups) updatePickups(gdt); if (!skip.interact) updateInteract(); if (!skip.zones) checkZones(); }
+    if (state.mode === 'playing') { state.play += dt; save.play = state.play; if (!skip.player) updatePlayer(gdt); if (!skip.enemies) { updateEnemies(gdt); updateProjectiles(gdt); updateFx(gdt); updateCompanion(gdt); } if (!skip.pickups) updatePickups(gdt); if (!skip.interact) updateInteract(); if (!skip.zones) checkZones(); }
     else if (state.mode === 'dialogue') { updateEnemies(0); animatePlayer(dt, 0); updateDialogue(dt); }
     else updateCinematic(dt);
     if (!skip.camera) updateCamera(dt);
@@ -1473,7 +1557,17 @@ function animatePlayer(dt, sp) {
   P.body.setLocalEulerAngles(bodyX, bodyY, 0); P.body.setLocalPosition(0, p.dodge > 0 ? 0.55 : Math.abs(Math.sin(p.walk * 2)) * 0.06 * clamp(sp / 6, 0, 1), 0);
   P.cape.setLocalEulerAngles(10 + clamp(sp * 4, 0, 40) + Math.sin(state.time * 3) * 4, 0, 0);
   P.head.setLocalEulerAngles(Math.sin(state.time * 1.7) * 2, 0, 0);
+  if (P.model) {
+    const m = P.model; let st = 'idle';
+    if (p.dead) st = 'death'; else if (p.attack > 0 || p.spin > 0) st = 'attack'; else if (p.cast > 0 || p.charging) st = 'cast';
+    else if (!p.grounded) st = 'jump'; else if (p.hurtFlash > 0.35) st = 'hurt'; else if (sp > 6.5) st = 'run'; else if (sp > 0.4) st = 'walk';
+    const newSwing = p.attack > (P.lastAttack || 0) + 0.05; P.lastAttack = p.attack;
+    playAnim(m, st, st === 'attack' ? 0.06 : 0.18, st === 'attack' && newSwing);
+    m.holder.setLocalEulerAngles(p.dodge > 0 ? bodyX : 0, p.spin > 0 ? bodyY : 0, 0);
+    if (m.hand) { P.mount.setPosition(m.hand.getPosition()); P.mount.setRotation(m.hand.getRotation()); }
+  }
   const flash = p.hurtFlash > 0 && Math.floor(state.time * 20) % 2 === 0; P.root.enabled = !flash || p.dead;
+  if (P.mount) P.mount.enabled = !!(P.model && P.model.hand) && P.root.enabled;   // l'arme clignote avec le personnage
 }
 function nearestEnemy(range) { let best = null, bd = range; for (const e of enemies) { if (!e.alive || e.state === 'dormant') continue; const d = dist2(e.x, e.z, player.x, player.z); if (d < bd) { bd = d; best = e; } } return best; }
 function strike() {
@@ -1751,7 +1845,7 @@ function drawBigMap() {
 }
 
 /* Écrans et flux de jeu */
-const SCREENS = ['title', 'pause', 'settings', 'controls', 'credits', 'map', 'gameover', 'victory', 'inventory'];
+const SCREENS = ['title', 'pause', 'settings', 'controls', 'credits', 'map', 'gameover', 'victory', 'inventory', 'charSelect'];
 let screenStack = [];
 function show(id) { SCREENS.forEach((s) => { $(s).hidden = s !== id; }); }
 function openOverlay(id) { screenStack.push(SCREENS.find((s) => !$(s).hidden) || null); show(id); if (id === 'settings') fillSettings(); if (id === 'map') drawBigMap(); }
@@ -1766,6 +1860,11 @@ function onPauseKey() {
   if (state.mode === 'inventory') { toggleInventory(); return; }
   if (screenStack.length) { back(); return; }
   if (state.mode === 'playing') setPaused(true); else if (state.mode === 'paused') setPaused(false);
+}
+function openCharSelect() {
+  $('charCards').innerHTML = Object.entries(CHARACTERS).map(([id, c]) => `<button class="char-card" data-act="pickChar" data-char="${id}"><span class="char-icon">${c.icon}</span><b>${c.name}</b><em>${c.species}</em><small>${c.desc}</small>${c.builtin ? '' : '<i class="char-tag">Modèle 3D animé</i>'}</button>`).join('')
+    + UPCOMING.map((u) => `<div class="char-card locked"><span class="char-icon">${u.icon}</span><b>${u.name}</b><em>Bientôt</em><small>Modèle en préparation.</small></div>`).join('');
+  screenStack = ['title']; show('charSelect');
 }
 function toggleInventory() {
   if (state.mode === 'playing') { state.mode = 'inventory'; screenStack = []; renderInventory(); show('inventory'); if (locked()) { state.ignoreUnlock = true; document.exitPointerLock(); } }
@@ -1790,7 +1889,8 @@ function quitToKairos() { writeSave(); if (inFrame) parent.postMessage({ type: '
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-act]'); if (!b) return; Audio.init(); play('select');
   const a = b.dataset.act;
-  if (a === 'new') { if (loadSave() && !confirm('Commencer une nouvelle partie ? La progression actuelle sera remplacée.')) return; startGame(newSave()); }
+  if (a === 'new') { if (loadSave() && !confirm('Commencer une nouvelle partie ? La progression actuelle sera remplacée.')) return; openCharSelect(); }
+  if (a === 'pickChar') { const s = newSave(); s.character = b.dataset.char; startGame(s); }
   if (a === 'continue') startGame(loadSave());
   if (['settings', 'controls', 'credits', 'map'].includes(a)) openOverlay(a);
   if (a === 'back') { back(); if (state.mode === 'map' && $('map').hidden) state.mode = 'playing'; }
@@ -1831,11 +1931,13 @@ function startGame(s) {
   // anciennes sauvegardes : nouveaux champs
   s.gold ??= 0; s.potions ??= { hp: 1, mp: 0 }; s.arrows ??= 0; s.items ??= { sword: true }; s.chests ??= []; s.upgrades ??= {}; if (s.talked) s.items.flute = true;
   save = s; state.play = s.play || 0; player.maxHp = stats().maxHp; player.hp = player.maxHp; player.st = 100; player.dead = false; player.mp = stats().maxMp; player.hot = player.slow = player.rooted = 0;
+  s.character ??= 'nera'; setCharacter(s.character);
   for (const k in player.powerCd) player.powerCd[k] = 0; player.weapon = 'flute'; selectWeapon('sword'); hud.weapons = null; hud.purse = null;
   const sk = window.aube?.skipStart || {};
   if (!sk.apply) applySaveToWorld(); if (!sk.enemies) populateEnemies();
   const cp = CHECKPOINTS[s.talked ? s.checkpoint : 'camp'];
   placePlayer(s.talked ? cp.x : 2, s.talked ? cp.z : 140, s.talked ? null : Math.PI);
+  if (W.fox) { W.fox.holder.enabled = true; W.fox.x = player.x - 2; W.fox.z = player.z + 2; W.fox.yaw = player.yaw; }
   show(null); screenStack = []; $('hud').hidden = false; $('touch').hidden = !isTouch;
   state.mode = sk.mode || 'playing'; lastZone = null; setQuestChanged(); if (!sk.audio) { Audio.init(); Audio.setMode(save.finished ? 'dawn' : 'explore'); }
   if (!s.talked) setTimeout(() => toast('Approche-toi d’Ilyas et appuie sur E pour lui parler.'), 1500);
@@ -1849,6 +1951,7 @@ function placePlayer(x, z, yaw) {
 }
 function toTitle() { writeSave(); state.mode = 'title'; $('hud').hidden = true; $('touch').hidden = true; $('dialogue').hidden = true; screenStack = []; show('title'); refreshTitle(); if (locked()) document.exitPointerLock(); Audio.setMode('explore'); }
 function die() {
+  if (P.model) playAnim(P.model, 'death', 0.1);
   player.dead = true; save.deaths++; writeSave(); play('death');
   setTimeout(() => { state.mode = 'dead'; show('gameover'); if (locked()) document.exitPointerLock(); }, 900);
 }
@@ -1901,6 +2004,6 @@ function setDawn(on, k) {
     get state() { return state.mode; }, get save() { return save; }, player, enemies, ZONES, zoneObjs, interactables, device: device.isWebGPU ? 'webgpu' : 'webgl2',
     teleport: (x, z) => placePlayer(x, z, null), slay: (i) => { const e = enemies[i]; if (e?.alive) { e.hp = 0; killEnemy(e); } }, interact: (id) => interactables.find((i) => i.id === id)?.act(), kill: (zone) => { for (let k = 0; k < 6; k++) enemies.filter((e) => e.alive && (!zone || e.zone === zone || (zone === 'ridge' && e.zone === 'pylon'))).forEach((e) => { e.hp = 0; if (e.kind === 'boss') { e.shield = false; e.rig.shield.enabled = false; } killEnemy(e); }); },
     get gold() { return save.gold; }, select: (w) => selectWeapon(w), stats, chests, projectiles, __reflex: (r) => enemyReflex(r), __dmg: (e, d) => damageEnemy(e, d, 0, 0, false, 'melee'),
-    press: (code) => pressed.add(code), chests, projectiles, selectWeapon, stats, openChest: (id) => openChest(chests.find((c) => c.id === id)), finishDialogue: () => { while (dlg) { dlg.shown = dlg.full.length; if (dlg.lines[dlg.i].choices) choose(dlg.lines[dlg.i].choices.length - 1); else advance(); } },
+    press: (code) => pressed.add(code), cam, input, MODELS, setCharacter, get P() { return P; }, get fox() { return W.fox; }, chests, projectiles, selectWeapon, stats, openChest: (id) => openChest(chests.find((c) => c.id === id)), finishDialogue: () => { while (dlg) { dlg.shown = dlg.full.length; if (dlg.lines[dlg.i].choices) choose(dlg.lines[dlg.i].choices.length - 1); else advance(); } },
   };
 })();

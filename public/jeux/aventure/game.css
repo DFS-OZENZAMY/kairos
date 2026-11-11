@@ -166,3 +166,15 @@ dd { margin: 0; color: var(--muted); }
 #inventory h3 { font-family: var(--display); color: var(--gold); font-size: 14px; letter-spacing: .1em; margin: 14px 0 8px; }
 .tbtns { grid-template-columns: repeat(3, 58px); } .tbtns button { width: 58px; height: 58px; } .tbtns .big { grid-column: span 3; }
 @media (max-width: 640px) { .weapons { bottom: auto; top: 112px; left: auto; right: 12px; transform: none; flex-direction: column; } .wslot { width: 44px; height: 44px; font-size: 19px; } .wpower { display: none; } }
+
+/* ---------- Choix du personnage ---------- */
+.char-panel { width: min(900px, 100%); }
+.char-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.char-card { display: grid; gap: 6px; justify-items: center; text-align: center; padding: 18px 14px; border-radius: 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, .05); color: var(--ink); position: relative; transition: border-color .15s, transform .12s, background .15s; }
+button.char-card:hover, button.char-card:focus-visible { border-color: var(--gold); background: rgba(242, 196, 109, .12); transform: translateY(-2px); outline: none; }
+.char-card.locked { opacity: .45; }
+.char-icon { font-size: 44px; line-height: 1; filter: drop-shadow(0 4px 12px rgba(0, 0, 0, .5)); }
+.char-card b { font-family: var(--display); font-size: 18px; color: var(--gold-2); letter-spacing: .06em; }
+.char-card em { font-style: normal; font-size: 12px; text-transform: uppercase; letter-spacing: .16em; color: var(--muted); }
+.char-card small { color: var(--muted); font-size: 13px; line-height: 1.45; }
+.char-tag { position: absolute; top: 8px; right: 8px; font-style: normal; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 99px; background: var(--gold); color: #2A1803; }

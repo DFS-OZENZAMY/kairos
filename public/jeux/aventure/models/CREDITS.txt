@@ -1,0 +1,12 @@
+Modèles 3D utilisés par « Aube — Les Reliques du Gardien »
+
+RobotExpressive.glb (personnage K-7)
+  Modèle de Tomás Laulhé (Quaternius) — licence CC0 1.0 (domaine public).
+  Morphes d'expressions ajoutés par Don McCurdy.
+  Source : https://github.com/mrdoob/three.js/tree/dev/examples/models/gltf/RobotExpressive
+
+Fox.glb (compagnon Roux)
+  Modèle de PixelMannen (CC0) ; rigging et animation © 2014 tomkranis ;
+  conversion glTF © 2017 AsoboStudio et scurest — licence Creative Commons Attribution 4.0
+  (https://creativecommons.org/licenses/by/4.0/).
+  Source : https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox

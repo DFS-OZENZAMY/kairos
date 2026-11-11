@@ -15,7 +15,7 @@ async def main():
       await pg.wait_for_timeout(1000)
     E = lambda js: pg.evaluate(js); W = lambda ms: pg.wait_for_timeout(ms)
     await E("aube.render(false)")
-    await pg.click("[data-act='new']"); await W(800)
+    await pg.click("[data-act='new']"); await pg.click(".char-card[data-char='nera']"); await W(800)
     # Ilyas offre la flûte
     await E("aube.teleport(aube.interactables.find(i=>i.id==='ilyas').x, aube.interactables.find(i=>i.id==='ilyas').z + 2.2)"); await W(300)
     await E("aube.interact('ilyas')"); await W(200); await E("aube.finishDialogue()"); await W(300)
