@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0B1020">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>Aube — Les Reliques du Gardien</title>
+  <link rel="icon" href="../../icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;800&family=Instrument+Sans:wght@400..600&display=swap">
+  <link rel="stylesheet" href="game.css">
+</head>
+<body>
+  <canvas id="game" aria-label="Monde du jeu"></canvas>
+
+  <!-- Chargement -->
+  <div id="loader" class="screen loader">
+    <div class="loader-card">
+      <div class="logo"><span>AUBE</span><small>Les Reliques du Gardien</small></div>
+      <div class="bar"><i id="loadBar"></i></div>
+      <p id="loadText">Préparation du moteur…</p>
+    </div>
+  </div>
+
+  <!-- Menu titre -->
+  <div id="title" class="screen title" hidden>
+    <div class="title-inner">
+      <div class="logo big"><span>AUBE</span><small>Les Reliques du Gardien</small></div>
+      <p class="tagline">Le soleil ne se lève plus sur l’île d’Aube. Retrouve les trois éclats et rallume le Temple.</p>
+      <nav class="menu" aria-label="Menu principal">
+        <button data-act="continue" id="btnContinue" hidden>Continuer <small id="saveInfo"></small></button>
+        <button data-act="new" class="primary">Nouvelle partie</button>
+        <button data-act="settings">Réglages</button>
+        <button data-act="controls">Commandes</button>
+        <button data-act="credits">Crédits</button>
+        <button data-act="quit" class="ghost" id="btnQuitTitle">↩ Retour à Kairos</button>
+      </nav>
+    </div>
+    <p class="engine" id="engineInfo"></p>
+  </div>
+
+  <!-- Interface en jeu -->
+  <div id="hud" class="hud" hidden>
+    <div class="vitals">
+      <div class="hearts" id="hearts" aria-hidden="true"></div>
+      <div class="meter hp" title="Vie"><i id="hpBar"></i><span id="hpText"></span></div>
+      <div class="meter st" title="Endurance"><i id="stBar"></i></div>
+    </div>
+    <div class="quest"><b id="questTitle">Objectif</b><span id="questText"></span><span id="questSub"></span></div>
+    <div class="shards" id="shards" aria-label="Éclats d’Aube"></div>
+    <canvas id="minimap" width="180" height="180" aria-label="Mini-carte (M pour la carte)"></canvas>
+    <div class="prompt" id="prompt" hidden></div>
+    <div class="zone-title" id="zoneTitle"></div>
+    <div class="boss" id="bossBar" hidden><b id="bossName"></b><div class="meter"><i id="bossHp"></i></div></div>
+    <div class="toasts" id="toasts"></div>
+    <div class="damage-flash" id="dmgFlash"></div>
+    <div class="floaters" id="floaters"></div>
+    <button class="hud-btn" data-act="pause" aria-label="Pause">❚❚</button>
+  </div>
+
+  <!-- Dialogue -->
+  <div id="dialogue" class="dialogue" hidden>
+    <div class="portrait" id="dlgPortrait">I</div>
+    <div class="dlg-body"><b id="dlgName"></b><p id="dlgText"></p><div class="choices" id="dlgChoices"></div><span class="dlg-next" id="dlgNext">E / Espace ▸</span></div>
+  </div>
+
+  <!-- Pause -->
+  <div id="pause" class="screen dim" hidden>
+    <div class="panel">
+      <h2>Pause</h2>
+      <nav class="menu"><button data-act="resume" class="primary">Reprendre</button><button data-act="map">Carte</button><button data-act="settings">Réglages</button><button data-act="controls">Commandes</button><button data-act="toTitle">Menu principal</button><button data-act="quit" class="ghost">↩ Retour à Kairos</button></nav>
+      <p class="hint" id="pauseStats"></p>
+    </div>
+  </div>
+
+  <!-- Réglages -->
+  <div id="settings" class="screen dim" hidden>
+    <form class="panel wide" id="settingsForm">
+      <h2>Réglages</h2>
+      <div class="grid">
+        <label>Qualité graphique<select name="quality"><option value="low">Basse</option><option value="medium">Moyenne</option><option value="high">Haute</option><option value="ultra">Ultra</option></select></label>
+        <label>Rendu<select name="renderer"><option value="auto">Automatique (WebGPU si disponible)</option><option value="webgl2">WebGL 2</option></select></label>
+        <label>Sensibilité de la caméra <input type="range" name="sensitivity" min="0.2" max="2.5" step="0.05"></label>
+        <label>Champ de vision <input type="range" name="fov" min="55" max="90" step="1"></label>
+        <label>Volume général <input type="range" name="volume" min="0" max="1" step="0.05"></label>
+        <label>Musique <input type="range" name="music" min="0" max="1" step="0.05"></label>
+        <label>Effets sonores <input type="range" name="sfx" min="0" max="1" step="0.05"></label>
+        <label class="check"><input type="checkbox" name="invertY"> Inverser l’axe vertical</label>
+        <label class="check"><input type="checkbox" name="shake"> Secousses de caméra</label>
+        <label class="check"><input type="checkbox" name="showFps"> Afficher les images par seconde</label>
+      </div>
+      <p class="hint" id="rendererHint">Le changement de rendu s’applique au prochain lancement.</p>
+      <div class="row"><button type="button" data-act="back" class="primary">Terminé</button></div>
+    </form>
+  </div>
+
+  <!-- Commandes -->
+  <div id="controls" class="screen dim" hidden>
+    <div class="panel wide">
+      <h2>Commandes</h2>
+      <div class="controls-grid">
+        <div><h3>Clavier et souris</h3><dl>
+          <dt>ZQSD / WASD</dt><dd>Se déplacer</dd><dt>Souris</dt><dd>Orienter la caméra (clic pour capturer)</dd>
+          <dt>Maj</dt><dd>Courir</dd><dt>Espace</dt><dd>Sauter</dd><dt>Clic gauche / J</dt><dd>Attaquer (enchaînement ×3)</dd>
+          <dt>Clic droit / Ctrl / K</dt><dd>Esquiver (roulade)</dd><dt>E</dt><dd>Parler, activer, ramasser</dd>
+          <dt>M</dt><dd>Carte</dd><dt>Échap / P</dt><dd>Pause</dd><dt>Molette</dt><dd>Distance de la caméra</dd></dl></div>
+        <div><h3>Manette</h3><dl>
+          <dt>Stick gauche</dt><dd>Se déplacer</dd><dt>Stick droit</dt><dd>Caméra</dd><dt>A</dt><dd>Sauter</dd><dt>X</dt><dd>Attaquer</dd>
+          <dt>B</dt><dd>Esquiver</dd><dt>Y / RB</dt><dd>Interagir</dd><dt>LB</dt><dd>Courir</dd><dt>Start</dt><dd>Pause</dd><dt>Select</dt><dd>Carte</dd></dl>
+          <h3>Écran tactile</h3><p class="hint">Joystick à gauche, glisser à droite pour la caméra, boutons d’action à droite.</p></div>
+      </div>
+      <div class="row"><button data-act="back" class="primary">Retour</button></div>
+    </div>
+  </div>
+
+  <!-- Crédits -->
+  <div id="credits" class="screen dim" hidden>
+    <div class="panel">
+      <h2>Crédits</h2>
+      <p><b>Aube — Les Reliques du Gardien</b><br>Un jeu d’aventure pour Kairos.</p>
+      <p>Moteur 3D : <b>PlayCanvas Engine 2.24</b> (licence MIT), rendu WebGPU / WebGL 2.</p>
+      <p>Monde, modèles et animations générés procéduralement ; musique et bruitages synthétisés en temps réel (Web Audio).</p>
+      <div class="row"><button data-act="back" class="primary">Retour</button></div>
+    </div>
+  </div>
+
+  <!-- Carte -->
+  <div id="map" class="screen dim" hidden>
+    <div class="panel map-panel">
+      <h2>Île d’Aube</h2>
+      <canvas id="bigmap" width="560" height="560" aria-label="Carte de l’île"></canvas>
+      <ul class="legend"><li><i class="lg-you"></i>Toi</li><li><i class="lg-goal"></i>Objectif</li><li><i class="lg-cp"></i>Point de sauvegarde</li><li><i class="lg-npc"></i>Ilyas</li><li><i class="lg-temple"></i>Temple</li></ul>
+      <div class="row"><button data-act="back" class="primary">Fermer (M)</button></div>
+    </div>
+  </div>
+
+  <!-- Défaite / victoire -->
+  <div id="gameover" class="screen dim red" hidden>
+    <div class="panel"><h2>Tu es tombé…</h2><p>Les gardiens corrompus t’ont vaincu. Le dernier feu d’Aube veille encore sur toi.</p>
+      <div class="row"><button data-act="respawn" class="primary">Reprendre au dernier point de sauvegarde</button><button data-act="toTitle">Menu principal</button></div></div>
+  </div>
+  <div id="victory" class="screen dim gold" hidden>
+    <div class="panel"><div class="logo"><span>AUBE</span><small>est revenue</small></div>
+      <p>Les trois éclats brillent à nouveau sur l’autel. Pour la première fois depuis des années, le soleil se lève sur l’île.</p>
+      <dl class="stats" id="victoryStats"></dl>
+      <div class="row"><button data-act="explore" class="primary">Continuer à explorer</button><button data-act="toTitle">Menu principal</button><button data-act="quit" class="ghost">↩ Retour à Kairos</button></div></div>
+  </div>
+
+  <!-- Contrôles tactiles -->
+  <div id="touch" class="touch" hidden>
+    <div class="stick" id="stick"><i id="stickKnob"></i></div>
+    <div class="tbtns">
+      <button data-touch="attack" class="big">⚔</button><button data-touch="jump">⤒</button><button data-touch="dodge">↻</button><button data-touch="interact">E</button>
+    </div>
+  </div>
+
+  <div class="fps" id="fps" hidden></div>
+  <noscript><p class="noscript">Ce jeu nécessite JavaScript et un navigateur compatible WebGL 2.</p></noscript>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
