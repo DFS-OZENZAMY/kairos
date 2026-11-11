@@ -28,12 +28,12 @@ const HANDLE_RE = /^[a-z0-9][a-z0-9._-]{2,31}$/;
 const STATUSES = ['todo', 'doing', 'done'];
 const MAX_FAILS = 10, FAIL_WINDOW = 15 * 60 * 1000;
 
-const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), {
+export const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), {
   status,
   headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers },
 });
-const err = (message, status = 400) => json({ error: message }, status);
-const fail = (message, status) => { throw Object.assign(new Error(message), { status }); };
+export const err = (message, status = 400) => json({ error: message }, status);
+export const fail = (message, status) => { throw Object.assign(new Error(message), { status }); };
 
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 const randHex = (n) => hex(crypto.getRandomValues(new Uint8Array(n)));
@@ -48,19 +48,19 @@ function safeEqual(a, b) {
   let r = 0; for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return r === 0;
 }
-const str = (v, min, max, label) => {
+export const str = (v, min, max, label) => {
   const s = typeof v === 'string' ? v.trim() : '';
   if (s.length < min || s.length > max) fail(`${label} : ${min === 0 ? '' : `${min} à `}${max} caractères maximum`, 400);
   return s;
 };
 const cookieOf = (req, name) => (req.headers.get('cookie') || '').split(/;\s*/).map((c) => c.split('=')).find(([k]) => k === name)?.[1] || '';
 
-async function readJson(req) {
+export async function readJson(req) {
   if (Number(req.headers.get('content-length') || 0) > 50_000) fail('Requête trop volumineuse', 413);
   try { return await req.json(); } catch { return fail('Requête invalide', 400); }
 }
 
-async function userFromRequest(req, db) {
+export async function userFromRequest(req, db) {
   const token = cookieOf(req, COOKIE);
   if (!/^[0-9a-f]{64}$/.test(token)) return null;
   const row = await db.prepare('SELECT u.id, u.handle, u.name FROM tm_sessions s JOIN tm_users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ?')
@@ -74,8 +74,8 @@ async function startSession(db, userId, secure) {
 }
 const clearCookie = (secure) => `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict${secure ? '; Secure' : ''}`;
 
-const roleIn = async (db, teamId, userId) => (await db.prepare('SELECT role FROM tm_members WHERE team_id = ? AND user_id = ?').bind(teamId, userId).first())?.role || null;
-const isAdmin = (role) => role === 'owner' || role === 'admin';
+export const roleIn = async (db, teamId, userId) => (await db.prepare('SELECT role FROM tm_members WHERE team_id = ? AND user_id = ?').bind(teamId, userId).first())?.role || null;
+export const isAdmin = (role) => role === 'owner' || role === 'admin';
 async function projectAccess(db, projectId, userId) {
   const p = await db.prepare('SELECT * FROM tm_projects WHERE id = ?').bind(projectId).first();
   if (!p) fail('Projet introuvable', 404);
@@ -83,7 +83,7 @@ async function projectAccess(db, projectId, userId) {
   if (!role) fail('Projet introuvable', 404); // ne révèle pas l'existence aux non-membres
   return { project: p, role };
 }
-async function notify(env, projectId, event) {
+export async function notify(env, projectId, event) {
   if (!env.ROOM) return;
   try { await env.ROOM.get(env.ROOM.idFromName(projectId)).fetch('https://room/broadcast', { method: 'POST', body: JSON.stringify(event) }); } catch { /* le temps réel est un bonus */ }
 }
@@ -320,7 +320,8 @@ export class ProjectRoom {
     if (now - (a.last || 0) < 300) return; // anti-flood
     ws.serializeAttachment({ ...a, last: now });
     // L'appartenance est revérifiée à chaque message (membre retiré = plus d'écriture).
-    const proj = await this.env.DB.prepare('SELECT team_id FROM tm_projects WHERE id = ?').bind(a.pid).first();
+    const proj = await this.env.DB.prepare('SELECT team_id FROM tm_projects WHERE id = ?').bind(a.pid).first()
+      || await this.env.DB.prepare('SELECT s.team_id FROM pm_lists l JOIN pm_spaces s ON s.id = l.space_id WHERE l.id = ?').bind(a.pid).first();
     const ok = proj && await this.env.DB.prepare('SELECT 1 AS x FROM tm_members WHERE team_id = ? AND user_id = ?').bind(proj.team_id, a.uid).first();
     if (!ok) { try { ws.close(4403, 'Accès retiré'); } catch { /* déjà fermé */ } return; }
     const res = await this.env.DB.prepare('INSERT INTO tm_messages (project_id, user_id, body, created_at) VALUES (?, ?, ?, ?)').bind(a.pid, a.uid, body, now).run();

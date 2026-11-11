@@ -13,6 +13,18 @@ Ta journée de A à Z, tes mots de passe et tes codes 2FA, dans une seule app. T
 - **Focus** : minuteur Pomodoro avec statistiques sur 7 jours et notifications.
 - **Recherche globale** : `Ctrl + K` pour trouver un site, un code, une tâche ou une note et copier en un geste.
 
+## Projets d’équipe (gestion de projet façon ClickUp)
+
+Section **Projets** de la navigation (nécessite le déploiement Cloudflare). Un compte d’équipe (identifiant + mot de passe) est créé séparément du coffre : les données d’équipe sont stockées sur le serveur pour être partagées, le coffre personnel reste chiffré de bout en bout.
+
+- **Organisation** : espaces de travail (équipes, invitations par code, rôles propriétaire / administrateur / membre) → **espaces** (couleur) → **dossiers** → **listes** → **tâches** → **sous-tâches**. Les anciens projets d’équipe deviennent automatiquement des listes, avec leurs tâches et leur discussion.
+- **Tâches** : statuts personnalisables par liste (ouvert / en cours / terminé, couleurs, ordre), plusieurs responsables, observateurs, priorité (urgente → basse), dates de début et d’échéance, estimation, **suivi du temps** (chronomètre visible partout ou saisie manuelle), étiquettes, **champs personnalisés** (texte, nombre, liste déroulante, date, case à cocher, lien), checklist, **dépendances** (« bloquée par », sans boucle, confirmation avant de terminer une tâche bloquée), jalons, **tâches récurrentes** (jour / semaine / mois), description en Markdown, commentaires avec **@mentions**, historique d’activité, duplication, archivage, déplacement entre listes.
+- **Vues** : **Liste** (groupée par statut, responsable, priorité, échéance…), **Tableau** Kanban (glisser-déposer), **Données** (tableur éditable avec totaux), **Calendrier** (glisser une tâche sur un jour), **Gantt** (barres déplaçables et redimensionnables, flèches de dépendances, jalons). Recherche, filtres (responsables, priorité, étiquettes, échéance), tri, « Moi », tâches terminées et sous-tâches, **vues enregistrées** (personnelles ou partagées), actions groupées.
+- **Transversal** : **Mes tâches** sur tous les espaces, **boîte de réception** (assignations, mentions, commentaires, changements de statut des tâches suivies), **tableau de bord** (indicateurs, charge de chaque membre, activité sur 8 semaines, retards, à venir), **objectifs** (cibles chiffrées, oui/non ou tâches liées, progression automatique), **documents** d’espace en Markdown.
+- **Temps réel** : les changements et la discussion de chaque liste arrivent instantanément chez les autres membres (Durable Object `ProjectRoom`), avec la présence des personnes connectées.
+
+Code : `worker/pm.js` (API `/api/pm`, tables `pm_*` créées automatiquement), `public/pm.js` et `public/pm.css`. Tests : `tests/pm_api_test.py` (API, 31 vérifications) et `tests/pm_browser_e2e.py` (navigateur, deux membres, 25 vérifications) contre `npx wrangler dev`.
+
 ## Synchronisation entre appareils (Cloudflare)
 
 Déployé sur Cloudflare, Kairos peut synchroniser ton coffre entre tous tes appareils grâce à une base **Cloudflare D1**, **chiffrée de bout en bout** :

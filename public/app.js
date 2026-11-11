@@ -1,7 +1,7 @@
 /* Kairos — application locale chiffrée (tâches, habitudes, notes, coffre, 2FA, focus) */
 'use strict';
 (() => {
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   const ITER = 310000;
   const STORE_KEY = 'kairos.vault.v1';
   const PREFS_KEY = 'kairos.prefs';
@@ -43,6 +43,7 @@
      Icônes
      ========================================================= */
   const ICONS = {
+    projects: '<rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="4" height="13" rx="1.5"/>',
     today: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     tasks: '<rect x="3" y="3" width="18" height="18" rx="5"/><path d="m8 12 3 3 5-6"/>',
     habits: '<path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/>',
@@ -336,6 +337,7 @@
     const f = modal.querySelector('[autofocus]'); if (f) f.focus();
   }
   function closeModal() { if (modal.open) modal.close(); }
+  window.Kairos = { esc, ic: (n) => ic(n), toast: (m, k) => toast(m, k), openModal, closeModal, confirmBox: (o) => confirmBox(o), timeAgo: (t) => timeAgo(t) };
   modal.addEventListener('close', () => { if (modal.open) return; stopCamera(); modal.innerHTML = ''; });
   modal.addEventListener('mousedown', (e) => { if (e.target === modal) closeModal(); });
 
@@ -454,7 +456,7 @@
      Coque de l'app et navigation
      ========================================================= */
   const NAV = [
-    ['today', 'Aujourd’hui'], ['tasks', 'Tâches'], ['habits', 'Habitudes'], ['notes', 'Notes'],
+    ['today', 'Aujourd’hui'], ['tasks', 'Tâches'], ['projects', 'Projets'], ['habits', 'Habitudes'], ['notes', 'Notes'],
     ['vault', 'Coffre'], ['otp', 'Codes 2FA'], ['focus', 'Focus'], ['settings', 'Réglages'],
   ];
   function enterApp() {
@@ -477,7 +479,7 @@
   }
   function route() {
     if (!session.key) return;
-    const v = location.hash.replace(/^#\/?/, '') || 'today';
+    const v = (location.hash.replace(/^#\/?/, '') || 'today').split('/')[0];   // #/projects/list/… → vue « projects »
     state.view = VIEWS[v] ? v : 'today';
     render();
     $('#view').focus({ preventScroll: true });
@@ -510,6 +512,10 @@
 
   const VIEWS = {};
   const AFTER = {};
+
+  /* Projets d'équipe (gestion de projet façon ClickUp) : module public/pm.js */
+  VIEWS.projects = () => '<div id="pmRoot" class="pm-root"></div>';
+  AFTER.projects = () => window.KairosPM?.mount($('#pmRoot'));
 
   VIEWS.today = () => {
     const now = new Date(), tk = dayKey();

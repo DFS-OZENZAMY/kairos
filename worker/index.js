@@ -6,6 +6,7 @@
  * du mot de passe maître, dont il ne garde que l'empreinte SHA-256.
  */
 import { handleTeam, TEAM_SCHEMA, ProjectRoom } from './team.js';
+import { handlePm, PM_SCHEMA } from './pm.js';
 export { ProjectRoom };
 
 const MAX_CT = 1_800_000;          // D1 limite une ligne à ~2 Mo
@@ -19,7 +20,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS attempts (id TEXT PRIMARY KEY, fails INTEGER NOT NULL, window_start INTEGER NOT NULL)`,
 ];
 let schemaReady = null;
-const ensureSchema = (db) => (schemaReady ||= db.batch([...SCHEMA, ...TEAM_SCHEMA].map((s) => db.prepare(s))).catch((e) => { schemaReady = null; throw e; }));
+const ensureSchema = (db) => (schemaReady ||= db.batch([...SCHEMA, ...TEAM_SCHEMA, ...PM_SCHEMA].map((s) => db.prepare(s))).catch((e) => { schemaReady = null; throw e; }));
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -93,6 +94,7 @@ async function api(req, env, url) {
   }
 
   if (path.startsWith('/api/team')) return handleTeam(req, env, url);
+  if (path.startsWith('/api/pm')) return handlePm(req, env, url);   // gestion de projet (façon ClickUp)
 
   if (path !== '/api/vault') return err('Route inconnue', 404);
 
